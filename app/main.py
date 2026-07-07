@@ -27,11 +27,7 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# --- SCHEMAS ---
-class ProductCreate(BaseModel): name: str; price: float; category: str; image_url: str = None
-class OrderStatusUpdate(BaseModel): status: str
-
-# --- WEBSOCKET ---
+# --- GERENCIADOR WEBSOCKET ---
 class Manager:
     def __init__(self): self.cons = {}
     async def connect(self, ws, s_id):
@@ -46,41 +42,57 @@ class Manager:
 
 manager = Manager()
 
-# --- ROTAS ---
+# --- ROTAS DE CONFIGURAÇÃO ---
 @app.get("/api/db-reset")
 def db_reset(db: Session = Depends(get_db)):
-    Base.metadata.drop_all(bind=engine); Base.metadata.create_all(bind=engine)
-    return "BANCO ZERADO"
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    return "BANCO ZERADO COM SUCESSO"
 
 @app.get("/api/setup")
 def setup(db: Session = Depends(get_db)):
-    if not db.query(User).first():
-        db.add(User(username="admin", password="123", store_id=1)); db.commit()
-    return "OK"
+    if not db.query(User).filter(User.username == "admin").first():
+        db.add(User(username="admin", password="123", store_id=1))
+        db.commit()
+        return "USUARIO admin SENHA 123 CRIADO"
+    return "USUARIO JA EXISTE"
 
+# --- ROTAS DE LOGIN (VERSÃO SIMPLIFICADA) ---
+@app.post("/api/login")
+async def login(data: dict, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == data['username'], User.password == data['password']).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Incorreto")
+    return {"store_id": user.store_id, "username": user.username}
+
+# --- ROTAS DE PRODUTOS ---
 @app.get("/api/products/{s_id}")
 def list_p(s_id: int, db: Session = Depends(get_db)):
     return db.query(Product).filter(Product.store_id == s_id).all()
 
 @app.post("/api/products/{s_id}")
-def add_p(s_id: int, p: ProductCreate, db: Session = Depends(get_db)):
-    db.add(Product(**p.dict(), store_id=s_id)); db.commit(); return "OK"
+def add_p(s_id: int, data: dict, db: Session = Depends(get_db)):
+    db_prod = Product(name=data['name'], price=data['price'], store_id=s_id, category=data['category'], image_url=data.get('image_url'))
+    db.add(db_prod); db.commit()
+    return "OK"
 
+# --- ROTAS DE PEDIDOS ---
 @app.get("/api/orders/{s_id}")
-def list_orders(s_id: int, db: Session = Depends(get_db)):
+def list_o(s_id: int, db: Session = Depends(get_db)):
     return db.query(Order).filter(Order.store_id == s_id).order_by(Order.id.desc()).all()
 
 @app.post("/order/{s_id}")
-async def create_order(s_id: int, data: dict, db: Session = Depends(get_db)):
-    new_order = Order(cliente=data['cliente'], itens=data['itens'], total=data['total'], store_id=s_id)
-    db.add(new_order); db.commit(); db.refresh(new_order)
-    payload = {"id": new_order.id, "cliente": new_order.cliente, "itens": new_order.itens, "total": new_order.total, "status": new_order.status}
-    await manager.send(s_id, payload); return "OK"
+async def create_o(s_id: int, data: dict, db: Session = Depends(get_db)):
+    o = Order(cliente=data['cliente'], itens=data['itens'], total=data['total'], store_id=s_id)
+    db.add(o); db.commit(); db.refresh(o)
+    payload = {"id":o.id, "cliente":o.cliente, "itens":o.itens, "total":o.total, "status":o.status}
+    await manager.send(s_id, payload)
+    return "OK"
 
 @app.post("/api/orders/{o_id}/status")
-def update_status(o_id: int, data: OrderStatusUpdate, db: Session = Depends(get_db)):
+def up_status(o_id: int, data: dict, db: Session = Depends(get_db)):
     order = db.query(Order).filter(Order.id == o_id).first()
-    if order: order.status = data.status; db.commit()
+    if order: order.status = data['status']; db.commit()
     return "OK"
 
 @app.websocket("/ws/{s_id}")
@@ -90,8 +102,5 @@ async def ws_route(ws: WebSocket, s_id: int):
         while True: await ws.receive_text()
     except WebSocketDisconnect: manager.disconnect(ws, s_id)
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
-@app.get("/")
-def home():
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/static/index.html")
+# ORDEM DE MONTAGEM: ROTAS ACIMA, STATIC ABAIXO
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
