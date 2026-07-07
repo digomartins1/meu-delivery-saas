@@ -2,14 +2,12 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from .database import Base, engine, get_db, SessionLocal
+from .database import Base, engine, get_db
 from sqlalchemy import Column, Integer, String, Float
 from pydantic import BaseModel
+import json
 
-app = FastAPI()
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-# Modelo de Banco de Dados
+# Inicializa o Banco
 class Product(Base):
     __tablename__ = "products"
     id = Column(Integer, primary_key=True, index=True)
@@ -19,27 +17,32 @@ class Product(Base):
 
 Base.metadata.create_all(bind=engine)
 
-# Schemas para validação
 class ProductCreate(BaseModel):
     name: str
     price: float
 
-# Gerenciador WebSocket
+app = FastAPI()
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
 class Manager:
     def __init__(self): self.cons = {}
     async def connect(self, ws, s_id):
         await ws.accept()
         if s_id not in self.cons: self.cons[s_id] = []
         self.cons[s_id].append(ws)
-    def disconnect(self, ws, s_id): 
-        if s_id in self.cons: self.cons[s_id].remove(ws)
+    def disconnect(self, ws, s_id):
+        if s_id in self.cons:
+            try: self.cons[s_id].remove(ws)
+            except: pass
     async def send(self, s_id, data):
         if s_id in self.cons:
-            for ws in self.cons[s_id]: await ws.send_json(data)
+            for ws in self.cons[s_id]:
+                try: await ws.send_json(data)
+                except: pass
 
 manager = Manager()
 
-# --- ROTAS DE PRODUTOS ---
+# --- AS ROTAS DE API DEVEM VIR ANTES DO MOUNT ---
 
 @app.get("/api/products/{s_id}")
 def list_products(s_id: int, db: Session = Depends(get_db)):
@@ -50,7 +53,7 @@ def create_product(s_id: int, prod: ProductCreate, db: Session = Depends(get_db)
     db_prod = Product(name=prod.name, price=prod.price, store_id=s_id)
     db.add(db_prod)
     db.commit()
-    return {"status": "sucesso"}
+    return {"status": "ok"}
 
 @app.post("/order/{s_id}")
 async def order(s_id: int, data: dict):
@@ -62,6 +65,8 @@ async def ws_route(ws: WebSocket, s_id: int):
     await manager.connect(ws, s_id)
     try:
         while True: await ws.receive_text()
-    except WebSocketDisconnect: manager.disconnect(ws, s_id)
+    except WebSocketDisconnect:
+        manager.disconnect(ws, s_id)
 
+# O MOUNT deve ser a ÚLTIMA LINHA do arquivo
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
