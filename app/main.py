@@ -17,17 +17,16 @@ class Product(Base):
     __tablename__ = "products"
     id = Column(Integer, primary_key=True); name = Column(String)
     price = Column(Float); store_id = Column(Integer)
+    category = Column(String, default="Lanches") # NOVO CAMPO
 
 Base.metadata.create_all(bind=engine)
 
-# --- SCHEMAS ---
 class LoginData(BaseModel): username: str; password: str
-class ProductCreate(BaseModel): name: str; price: float
+class ProductCreate(BaseModel): name: str; price: float; category: str
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# --- GERENCIADOR WEBSOCKET ---
 class Manager:
     def __init__(self): self.cons = {}
     async def connect(self, ws, s_id):
@@ -42,7 +41,6 @@ class Manager:
 
 manager = Manager()
 
-# --- ROTAS API ---
 @app.post("/api/login")
 def login(data: LoginData, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == data.username, User.password == data.password).first()
@@ -62,7 +60,7 @@ def list_p(s_id: int, db: Session = Depends(get_db)):
 
 @app.post("/api/products/{s_id}")
 def add_p(s_id: int, p: ProductCreate, db: Session = Depends(get_db)):
-    db.add(Product(name=p.name, price=p.price, store_id=s_id)); db.commit()
+    db.add(Product(name=p.name, price=p.price, store_id=s_id, category=p.category)); db.commit()
     return {"ok": True}
 
 @app.post("/order/{s_id}")
