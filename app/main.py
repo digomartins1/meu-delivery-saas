@@ -5,13 +5,14 @@ from sqlalchemy.orm import Session
 from .database import Base, engine, get_db
 from sqlalchemy import Column, Integer, String, Float
 from pydantic import BaseModel
+import json
 
 # --- MODELOS ---
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
     username = Column(String, unique=True)
-    password = Column(String) # Em prod, usaríamos hash
+    password = Column(String)
     store_id = Column(Integer)
 
 class Product(Base):
@@ -37,10 +38,23 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 def login(data: LoginData, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == data.username, User.password == data.password).first()
     if not user:
-        raise HTTPException(status_code=401, detail="Usuário ou senha inválidos")
+        raise HTTPException(status_code=401, detail="Incorreto")
     return {"status": "ok", "store_id": user.store_id, "username": user.username}
 
-# --- ROTAS DE PRODUTOS ---
+# --- ROTA DE EMERGÊNCIA (SETUP) ---
+# Acesse /api/setup para criar seu usuário
+@app.get("/api/setup")
+def setup(db: Session = Depends(get_db)):
+    # Verifica se já existe o admin para não duplicar
+    exist = db.query(User).filter(User.username == "admin").first()
+    if not exist:
+        new_user = User(username="admin", password="123", store_id=1)
+        db.add(new_user)
+        db.commit()
+        return {"msg": "Usuário 'admin' com senha '123' criado com sucesso!"}
+    return {"msg": "Usuário já existe!"}
+
+# --- ROTAS DE PRODUTOS E ORDERS ---
 @app.get("/api/products/{s_id}")
 def list_products(s_id: int, db: Session = Depends(get_db)):
     return db.query(Product).filter(Product.store_id == s_id).all()
