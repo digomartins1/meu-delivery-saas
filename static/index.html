@@ -5,63 +5,136 @@
     <title>Cardápio Digital</title><script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-50 pb-28">
+    
+    <!-- BOTÃO FLUTUANTE PARA VOLTAR AO STATUS (Só aparece se houver pedido) -->
+    <div id="btn-rastrear" onclick="mostrarStatus()" class="hidden fixed top-20 right-0 bg-orange-600 text-white px-4 py-2 rounded-l-full shadow-lg z-50 animate-pulse text-xs font-bold border-y border-l border-white/30">
+        📍 RASTREAR PEDIDO
+    </div>
+
     <div id="view-menu">
         <header class="bg-orange-600 text-white p-8 text-center shadow-lg">
-            <h1 class="text-3xl font-black italic tracking-tighter uppercase">Delivery Jotta</h1>
+            <h1 class="text-3xl font-black italic tracking-tighter uppercase text-white">Delivery Jotta</h1>
         </header>
         <main id="menu" class="p-4 max-w-md mx-auto"></main>
-        <div id="cart" class="fixed bottom-0 left-0 right-0 bg-white p-4 border-t hidden flex justify-between items-center shadow-2xl rounded-t-3xl">
+        
+        <div id="cart" class="fixed bottom-0 left-0 right-0 bg-white p-4 border-t hidden flex justify-between items-center shadow-2xl rounded-t-3xl z-40">
             <b id="tot" class="text-2xl text-orange-600 font-black">R$ 0,00</b>
-            <button onclick="send()" class="bg-green-600 text-white px-10 py-3 rounded-full font-black">ENVIAR PEDIDO</button>
+            <button onclick="send()" class="bg-green-600 text-white px-10 py-3 rounded-full font-black active:scale-90 transition">PEDIR AGORA</button>
         </div>
     </div>
-    <div id="view-status" class="hidden fixed inset-0 bg-white flex flex-col items-center justify-center p-10 text-center">
-        <div class="text-6xl mb-6 animate-bounce">🍔</div>
-        <h2 class="text-2xl font-bold mb-2">Pedido Recebido!</h2>
-        <div class="bg-gray-100 w-full p-6 rounded-2xl">
-            <p class="text-xs font-bold text-gray-400 mb-1 uppercase">Status em Tempo Real</p>
-            <p id="order-status" class="text-xl font-black text-orange-600 uppercase">Pendente</p>
+
+    <div id="view-status" class="hidden fixed inset-0 bg-white flex flex-col items-center justify-center p-10 text-center z-50">
+        <div class="text-6xl mb-6 animate-bounce">🛵</div>
+        <h2 class="text-2xl font-bold mb-2">Acompanhe seu Pedido</h2>
+        <p class="text-gray-400 text-sm mb-8 italic">Seu pedido já está em nossa cozinha!</p>
+        
+        <div class="bg-orange-50 w-full p-8 rounded-3xl border-2 border-orange-100">
+            <p class="text-[10px] font-black text-orange-400 mb-1 uppercase tracking-widest">Status Atual</p>
+            <p id="order-status" class="text-3xl font-black text-orange-600 uppercase tracking-tighter">Pendente</p>
         </div>
-        <button onclick="location.reload()" class="mt-10 text-gray-400 text-sm underline tracking-widest">VOLTAR AO MENU</button>
+
+        <div class="mt-10 space-y-4 w-full">
+            <button onclick="fecharStatus()" class="w-full bg-slate-100 text-slate-500 py-3 rounded-xl font-bold text-xs uppercase tracking-widest">Voltar ao Cardápio</button>
+            <p class="text-[10px] text-gray-300">O status atualiza sozinho quando o lojista mudar lá.</p>
+        </div>
     </div>
+
     <script>
-        const sId = 1; const WHATSAPP = "5582998095090"; 
+        const sId = 1; 
+        const WHATSAPP = "5511999999999"; // Troque pelo seu número
         let total = 0; let itens = [];
+
+        // 1. CARREGAR PRODUTOS
         async function load(){
             const res = await fetch(`/api/products/${sId}`);
             const data = await res.json();
+            const container = document.getElementById('menu');
             const cats = {};
             data.forEach(p => { if(!cats[p.category]) cats[p.category]=[]; cats[p.category].push(p); });
+            
             let h = "";
             for(let c in cats){
-                h += `<h2 class="text-orange-600 font-bold mt-8 mb-4 border-b border-orange-100 uppercase text-xs tracking-widest">${c}</h2>`;
+                h += `<h2 class="text-orange-600 font-black mt-8 mb-4 uppercase text-xs tracking-widest border-b border-orange-100 pb-1">${c}</h2>`;
                 h += cats[c].map(p=>`
                     <div class="bg-white p-3 rounded-2xl shadow-sm flex items-center mb-3 border border-gray-100">
-                        <img src="${p.image_url || 'https://via.placeholder.com/100'}" class="w-16 h-16 rounded-xl object-cover mr-4">
-                        <div class="flex-1"><h3 class="font-bold text-gray-800">${p.name}</h3><p class="text-orange-600 font-bold">R$ ${p.price.toFixed(2)}</p></div>
-                        <button onclick="add('${p.name}', ${p.price})" class="bg-orange-600 text-white w-10 h-10 rounded-full font-bold text-xl shadow-lg">+</button>
+                        <img src="${p.image_url || 'https://via.placeholder.com/150'}" class="w-16 h-16 rounded-xl object-cover mr-4 bg-gray-100">
+                        <div class="flex-1"><h3 class="font-bold text-gray-800 text-sm">${p.name}</h3><p class="text-orange-600 font-black text-sm">R$ ${p.price.toFixed(2)}</p></div>
+                        <button onclick="add('${p.name}', ${p.price})" class="bg-orange-600 text-white w-10 h-10 rounded-full font-bold text-xl shadow-lg shadow-orange-100 active:scale-90 transition">+</button>
                     </div>`).join('');
             }
-            document.getElementById('menu').innerHTML = h || '<p class="text-center mt-10 text-gray-400">Cardápio vazio.</p>';
+            container.innerHTML = h || '<p class="text-center py-20 text-gray-300">Nenhum item disponível.</p>';
+            
+            verificarPedidoExistente(); // Checa se tem pedido ao abrir
         }
-        function add(n,p){ total+=p; itens.push(n); document.getElementById('tot').innerText=`R$ ${total.toFixed(2)}`; document.getElementById('cart').classList.remove('hidden'); }
+
+        function add(n,p){
+            total+=p; itens.push(n);
+            document.getElementById('tot').innerText=`R$ ${total.toFixed(2)}`;
+            document.getElementById('cart').classList.remove('hidden');
+        }
+
         async function send(){
             const cli = prompt("Qual o seu nome?"); if(!cli) return;
             const res = await fetch(`/order/${sId}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({cliente:cli, total:total.toFixed(2), itens:itens.join(", ")}) });
             const data = await res.json();
+            
+            // SALVA NA MEMÓRIA DO CELULAR
+            localStorage.setItem('meu_ultimo_pedido', data.order_id);
+            
             const msg = `*PEDIDO:* ${itens.join(", ")}\n*TOTAL:* R$ ${total.toFixed(2)}\n*CLIENTE:* ${cli}`;
             window.open(`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(msg)}`);
-            iniciarStatus(data.order_id);
+            
+            iniciarMonitoramento(data.order_id);
         }
-        function iniciarStatus(id){
-            document.getElementById('view-menu').classList.add('hidden');
-            document.getElementById('view-status').classList.remove('hidden');
-            const ws = new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws/${sId}`);
+
+        // 2. MONITORAMENTO E TELAS
+        function iniciarMonitoramento(id) {
+            localStorage.setItem('meu_ultimo_pedido', id);
+            mostrarStatus();
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            const ws = new WebSocket(`${protocol}://${window.location.host}/ws/${sId}`);
             ws.onmessage = (e) => {
                 const d = JSON.parse(e.data);
-                if(d.id == id) document.getElementById('order-status').innerText = d.status;
+                if(d.id == id) {
+                    document.getElementById('order-status').innerText = d.status;
+                    if(d.status === 'Concluído') {
+                        localStorage.removeItem('meu_ultimo_pedido');
+                        setTimeout(() => location.reload(), 3000); // Recarrega após 3s do fim
+                    }
+                }
             };
         }
+
+        async function verificarPedidoExistente() {
+            const idSalvo = localStorage.getItem('meu_ultimo_pedido');
+            if(idSalvo) {
+                const res = await fetch(`/api/order-status/${idSalvo}`);
+                if(res.ok) {
+                    const data = await res.json();
+                    if(data.status !== 'Concluído') {
+                        document.getElementById('btn-rastrear').classList.remove('hidden');
+                        document.getElementById('order-status').innerText = data.status;
+                        iniciarMonitoramento(idSalvo);
+                    } else {
+                        localStorage.removeItem('meu_ultimo_pedido');
+                    }
+                }
+            }
+        }
+
+        function mostrarStatus() {
+            document.getElementById('view-menu').classList.add('hidden');
+            document.getElementById('view-status').classList.remove('hidden');
+            document.getElementById('btn-rastrear').classList.add('hidden');
+        }
+
+        function fecharStatus() {
+            document.getElementById('view-status').classList.add('hidden');
+            document.getElementById('view-menu').classList.remove('hidden');
+            document.getElementById('btn-rastrear').classList.remove('hidden');
+        }
+
         load();
     </script>
 </body>
