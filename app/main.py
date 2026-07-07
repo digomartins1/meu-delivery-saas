@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from datetime import datetime, timedelta
 import json
 
-# --- MODELOS ---
+# --- MOTOR DE BANCO DE DADOS ---
 class User(Base):
     __tablename__ = "users"; id = Column(Integer, primary_key=True)
     username = Column(String, unique=True); password = Column(String); store_id = Column(Integer)
@@ -26,10 +26,11 @@ class Order(Base):
 
 Base.metadata.create_all(bind=engine)
 
+# --- APP CONFIG ---
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# --- WEBSOCKET ---
+# --- GERENCIADOR WEBSOCKET ---
 class Manager:
     def __init__(self): self.cons = {}
     async def connect(self, ws, s_id):
@@ -44,4 +45,75 @@ class Manager:
 
 manager = Manager()
 
-# -
+# --- 1. ROTAS DE API (DEVEM VIR PRIMEIRO) ---
+
+@app.get("/api/db-reset")
+def db_reset(db: Session = Depends(get_db)):
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    return {"status": "BANCO RESETADO"}
+
+@app.get("/api/setup")
+def setup(db: Session = Depends(get_db)):
+    if not db.query(User).filter(User.username == "admin").first():
+        db.add(User(username="admin", password="123", store_id=1))
+        db.commit()
+        return {"status": "ADMIN CRIADO"}
+    return {"status": "JA EXISTE"}
+
+@app.post("/api/login")
+async def login(data: dict, db: Session = Depends(get_db)):
+    u = db.query(User).filter(User.username == data['username'], User.password == data['password']).first()
+    if not u: raise HTTPException(status_code=401)
+    return {"store_id": u.store_id, "username": u.username}
+
+@app.get("/api/products/{s_id}")
+def list_p(s_id: int, db: Session = Depends(get_db)):
+    return db.query(Product).filter(Product.store_id == s_id).all()
+
+@app.post("/api/products/{s_id}")
+def add_p(s_id: int, data: dict, db: Session = Depends(get_db)):
+    db.add(Product(**data, store_id=s_id))
+    db.commit()
+    return {"ok": True}
+
+@app.get("/api/orders/{s_id}")
+def list_o(s_id: int, db: Session = Depends(get_db)):
+    return db.query(Order).filter(Order.store_id == s_id, Order.status != "Concluído").order_by(Order.id.desc()).all()
+
+@app.get("/api/history/{s_id}")
+def get_h(s_id: int, db: Session = Depends(get_db)):
+    limite = datetime.now() - timedelta(days=15)
+    return db.query(Order).filter(Order.store_id == s_id, Order.created_at >= limite).all()
+
+@app.post("/order/{s_id}")
+async def create_o(s_id: int, data: dict, db: Session = Depends(get_db)):
+    o = Order(cliente=data['cliente'], itens=data['itens'], total=data['total'], store_id=s_id)
+    db.add(o); db.commit(); db.refresh(o)
+    await manager.send(s_id, {"id": o.id, "cliente": o.cliente, "status": "update"})
+    return {"order_id": o.id}
+
+@app.post("/api/orders/{o_id}/status")
+async def up_status(o_id: int, data: dict, db: Session = Depends(get_db)):
+    o = db.query(Order).filter(Order.id == o_id).first()
+    if o:
+        o.status = data['status']; db.commit()
+        await manager.send(o.store_id, {"id": o_id, "status": data['status']})
+    return {"ok": True}
+
+@app.websocket("/ws/{s_id}")
+async def ws_route(ws: WebSocket, s_id: int):
+    await manager.connect(ws, s_id)
+    try:
+        while True: await ws.receive_text()
+    except WebSocketDisconnect: manager.disconnect(ws, s_id)
+
+# --- 2. ROTAS DE ARQUIVOS (DEVE VIR POR ÚLTIMO) ---
+
+# Tenta servir da pasta 'static'
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/")
+def home():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/static/index.html")
