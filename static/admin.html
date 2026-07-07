@@ -1,27 +1,54 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-    <meta charset="UTF-8"><title>Painel Admin</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Gestão de Loja</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-slate-900 text-white p-5">
-    <h1 class="text-xl font-bold border-b border-slate-700 pb-3 mb-5">Pedidos em Tempo Real</h1>
-    <div id="lista" class="space-y-3"></div>
-    <audio id="som" src="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3"></audio>
-    <script>
-        const som = document.getElementById('som');
-        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-        const ws = new WebSocket(`${protocol}://${window.location.host}/ws/1`);
+<body class="bg-slate-900 text-white min-h-screen p-4">
+    
+    <!-- Menu Superior de Abas -->
+    <nav class="flex justify-center gap-4 mb-8">
+        <button onclick="switchTab('pedidos')" id="btn-pedidos" class="bg-orange-600 px-6 py-2 rounded-full font-bold">Pedidos</button>
+        <button onclick="switchTab('produtos')" id="btn-produtos" class="bg-slate-700 px-6 py-2 rounded-full font-bold">Produtos</button>
+    </nav>
+
+    <!-- ABA 1: PEDIDOS EM TEMPO REAL -->
+    <section id="aba-pedidos">
+        <header class="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
+            <h1 class="text-xl font-bold">Pedidos Chegando</h1>
+            <div id="status" class="text-green-500 text-xs font-bold animate-pulse">● ONLINE</div>
+        </header>
+        <div id="lista-pedidos" class="grid gap-4 max-w-lg mx-auto">
+            <p id="msg-vazia" class="text-slate-500 text-center italic">Aguardando pedidos...</p>
+        </div>
+    </section>
+
+    <!-- ABA 2: CADASTRO DE PRODUTOS -->
+    <section id="aba-produtos" class="hidden">
+        <h2 class="text-xl font-bold mb-6">Cadastrar Novo Item</h2>
         
-        ws.onmessage = (e) => {
-            const d = JSON.parse(e.data);
-            som.play();
-            document.getElementById('lista').insertAdjacentHTML('afterbegin', 
-                `<div class="bg-white text-black p-4 rounded shadow-lg animate-bounce">
-                    <b>${d.cliente}</b> - R$ ${d.total}<br><small>${d.itens}</small>
-                </div>`);
-        };
-        document.body.onclick = () => { som.play(); som.pause(); };
-    </script>
-</body>
-</html>
+        <div class="bg-slate-800 p-6 rounded-xl shadow-lg mb-8 max-w-lg mx-auto">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs uppercase text-slate-400 mb-1">Nome do Lanche</label>
+                    <input type="text" id="p-nome" class="w-full bg-slate-700 p-3 rounded-lg outline-none focus:ring-2 ring-orange-500" placeholder="Ex: X-Bacon Supremo">
+                </div>
+                <div>
+                    <label class="block text-xs uppercase text-slate-400 mb-1">Preço (R$)</label>
+                    <input type="number" id="p-preco" class="w-full bg-slate-700 p-3 rounded-lg outline-none focus:ring-2 ring-orange-500" placeholder="29.90">
+                </div>
+                <button onclick="salvarProduto()" class="w-full bg-green-600 hover:bg-green-700 py-3 rounded-lg font-bold transition">Salvar no Cardápio</button>
+            </div>
+        </div>
+
+        <h2 class="text-xl font-bold mb-4">Itens no Banco de Dados</h2>
+        <div id="lista-produtos" class="grid gap-2 max-w-lg mx-auto">
+            <!-- Produtos virão da API aqui -->
+        </div>
+    </section>
+
+    <audio id="som" src="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3"></audio>
+
+    <scrip
