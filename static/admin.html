@@ -1,54 +1,74 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - Gestão de Loja</title>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Painel</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-slate-900 text-white min-h-screen p-4">
-    
-    <!-- Menu Superior de Abas -->
-    <nav class="flex justify-center gap-4 mb-8">
-        <button onclick="switchTab('pedidos')" id="btn-pedidos" class="bg-orange-600 px-6 py-2 rounded-full font-bold">Pedidos</button>
-        <button onclick="switchTab('produtos')" id="btn-produtos" class="bg-slate-700 px-6 py-2 rounded-full font-bold">Produtos</button>
+<body class="bg-slate-900 text-white p-4">
+    <nav class="flex gap-2 mb-5">
+        <button onclick="tab('pedidos')" class="bg-orange-600 px-4 py-2 rounded">Pedidos</button>
+        <button onclick="tab('produtos')" class="bg-slate-700 px-4 py-2 rounded">Produtos</button>
     </nav>
 
-    <!-- ABA 1: PEDIDOS EM TEMPO REAL -->
-    <section id="aba-pedidos">
-        <header class="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
-            <h1 class="text-xl font-bold">Pedidos Chegando</h1>
-            <div id="status" class="text-green-500 text-xs font-bold animate-pulse">● ONLINE</div>
-        </header>
-        <div id="lista-pedidos" class="grid gap-4 max-w-lg mx-auto">
-            <p id="msg-vazia" class="text-slate-500 text-center italic">Aguardando pedidos...</p>
-        </div>
-    </section>
+    <div id="aba-pedidos">
+        <h2 class="font-bold mb-4">Pedidos em Tempo Real</h2>
+        <div id="lista-pedidos" class="space-y-2"></div>
+    </div>
 
-    <!-- ABA 2: CADASTRO DE PRODUTOS -->
-    <section id="aba-produtos" class="hidden">
-        <h2 class="text-xl font-bold mb-6">Cadastrar Novo Item</h2>
-        
-        <div class="bg-slate-800 p-6 rounded-xl shadow-lg mb-8 max-w-lg mx-auto">
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-xs uppercase text-slate-400 mb-1">Nome do Lanche</label>
-                    <input type="text" id="p-nome" class="w-full bg-slate-700 p-3 rounded-lg outline-none focus:ring-2 ring-orange-500" placeholder="Ex: X-Bacon Supremo">
-                </div>
-                <div>
-                    <label class="block text-xs uppercase text-slate-400 mb-1">Preço (R$)</label>
-                    <input type="number" id="p-preco" class="w-full bg-slate-700 p-3 rounded-lg outline-none focus:ring-2 ring-orange-500" placeholder="29.90">
-                </div>
-                <button onclick="salvarProduto()" class="w-full bg-green-600 hover:bg-green-700 py-3 rounded-lg font-bold transition">Salvar no Cardápio</button>
-            </div>
+    <div id="aba-produtos" class="hidden">
+        <div class="bg-slate-800 p-4 rounded mb-5">
+            <input type="text" id="nome" placeholder="Nome" class="w-full p-2 mb-2 bg-slate-700 rounded">
+            <input type="number" id="preco" placeholder="Preço" class="w-full p-2 mb-2 bg-slate-700 rounded">
+            <button onclick="salvar()" class="w-full bg-green-600 p-2 rounded">Cadastrar Produto</button>
         </div>
-
-        <h2 class="text-xl font-bold mb-4">Itens no Banco de Dados</h2>
-        <div id="lista-produtos" class="grid gap-2 max-w-lg mx-auto">
-            <!-- Produtos virão da API aqui -->
-        </div>
-    </section>
+        <div id="lista-produtos" class="space-y-2"></div>
+    </div>
 
     <audio id="som" src="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3"></audio>
 
-    <scrip
+    <script>
+        const storeId = 1;
+        const som = document.getElementById('som');
+
+        function tab(t) {
+            document.getElementById('aba-pedidos').classList.toggle('hidden', t !== 'pedidos');
+            document.getElementById('aba-produtos').classList.toggle('hidden', t !== 'produtos');
+            if(t === 'produtos') carregar();
+        }
+
+        async function salvar() {
+            const n = document.getElementById('nome').value;
+            const p = document.getElementById('preco').value;
+            try {
+                const res = await fetch(`/api/products/${storeId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name: n, price: parseFloat(p)})
+                });
+                if(res.ok) { alert("Salvo!"); carregar(); }
+                else { alert("Erro ao salvar: " + res.status); }
+            } catch(e) { alert("Erro de conexão: " + e); }
+        }
+
+        async function carregar() {
+            const res = await fetch(`/api/products/${storeId}`);
+            const data = await res.json();
+            document.getElementById('lista-produtos').innerHTML = data.map(p => `
+                <div class="p-2 bg-slate-800 rounded border-l-4 border-green-500">${p.name} - R$ ${p.price}</div>
+            `).join('');
+        }
+
+        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const ws = new WebSocket(`${protocol}://${window.location.host}/ws/${storeId}`);
+        ws.onmessage = (e) => {
+            const d = JSON.parse(e.data);
+            som.play();
+            document.getElementById('lista-pedidos').insertAdjacentHTML('afterbegin', `
+                <div class="bg-white text-black p-4 rounded mb-2 font-bold">${d.cliente}: R$ ${d.total}</div>
+            `);
+        };
+        document.onclick = () => { som.play(); som.pause(); };
+    </script>
+</body>
+    </html>
