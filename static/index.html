@@ -6,61 +6,60 @@
 </head>
 <body class="bg-gray-50 pb-28">
     <div id="view-menu">
-        <header class="bg-orange-600 text-white p-8 text-center"><h1 class="text-2xl font-black italic">DELIVERY JOTTA</h1></header>
+        <header class="bg-orange-600 text-white p-8 text-center shadow-lg">
+            <h1 class="text-3xl font-black italic tracking-tighter uppercase">Delivery Jotta</h1>
+        </header>
         <main id="menu" class="p-4 max-w-md mx-auto"></main>
-        <div id="cart" class="fixed bottom-0 left-0 right-0 bg-white p-4 border-t hidden flex justify-between items-center shadow-2xl">
+        <div id="cart" class="fixed bottom-0 left-0 right-0 bg-white p-4 border-t hidden flex justify-between items-center shadow-2xl rounded-t-3xl">
             <b id="tot" class="text-2xl text-orange-600 font-black">R$ 0,00</b>
-            <button onclick="send()" class="bg-green-600 text-white px-10 py-3 rounded-full font-black">PEDIR</button>
+            <button onclick="send()" class="bg-green-600 text-white px-10 py-3 rounded-full font-black">ENVIAR PEDIDO</button>
         </div>
     </div>
-
-    <!-- TELA DE STATUS (FICA ESCONDIDA ATÉ O PEDIDO SER FEITO) -->
     <div id="view-status" class="hidden fixed inset-0 bg-white flex flex-col items-center justify-center p-10 text-center">
-        <div class="w-24 h-24 bg-orange-100 rounded-full flex items-center justify-center text-4xl mb-6 animate-pulse">🍔</div>
+        <div class="text-6xl mb-6 animate-bounce">🍔</div>
         <h2 class="text-2xl font-bold mb-2">Pedido Recebido!</h2>
-        <p class="text-gray-500 mb-8">Não feche esta página, acompanhe o status abaixo:</p>
         <div class="bg-gray-100 w-full p-6 rounded-2xl">
-            <p class="text-xs uppercase font-bold text-gray-400 mb-1">Status Atual</p>
+            <p class="text-xs font-bold text-gray-400 mb-1 uppercase">Status em Tempo Real</p>
             <p id="order-status" class="text-xl font-black text-orange-600 uppercase">Pendente</p>
         </div>
-        <button onclick="location.reload()" class="mt-10 text-gray-400 text-sm underline">Fazer outro pedido</button>
+        <button onclick="location.reload()" class="mt-10 text-gray-400 text-sm underline tracking-widest">VOLTAR AO MENU</button>
     </div>
-
     <script>
-        const sId = 1; let total = 0; let itens = [];
+        const sId = 1; const WHATSAPP = "5582998095090"; 
+        let total = 0; let itens = [];
         async function load(){
             const res = await fetch(`/api/products/${sId}`);
             const data = await res.json();
-            const container = document.getElementById('menu');
-            container.innerHTML = data.map(p=>`
-                <div class="bg-white p-3 rounded-xl shadow-sm flex items-center mb-3 border border-gray-100">
-                    <img src="${p.image_url || 'https://via.placeholder.com/100'}" class="w-16 h-16 rounded-lg object-cover mr-4">
-                    <div class="flex-1 text-sm"><h3 class="font-bold">${p.name}</h3><p class="text-orange-600 font-bold">R$ ${p.price}</p></div>
-                    <button onclick="add('${p.name}', ${p.price})" class="bg-orange-600 text-white w-8 h-8 rounded-full font-bold">+</button>
-                </div>`).join('');
+            const cats = {};
+            data.forEach(p => { if(!cats[p.category]) cats[p.category]=[]; cats[p.category].push(p); });
+            let h = "";
+            for(let c in cats){
+                h += `<h2 class="text-orange-600 font-bold mt-8 mb-4 border-b border-orange-100 uppercase text-xs tracking-widest">${c}</h2>`;
+                h += cats[c].map(p=>`
+                    <div class="bg-white p-3 rounded-2xl shadow-sm flex items-center mb-3 border border-gray-100">
+                        <img src="${p.image_url || 'https://via.placeholder.com/100'}" class="w-16 h-16 rounded-xl object-cover mr-4">
+                        <div class="flex-1"><h3 class="font-bold text-gray-800">${p.name}</h3><p class="text-orange-600 font-bold">R$ ${p.price.toFixed(2)}</p></div>
+                        <button onclick="add('${p.name}', ${p.price})" class="bg-orange-600 text-white w-10 h-10 rounded-full font-bold text-xl shadow-lg">+</button>
+                    </div>`).join('');
+            }
+            document.getElementById('menu').innerHTML = h || '<p class="text-center mt-10 text-gray-400">Cardápio vazio.</p>';
         }
         function add(n,p){ total+=p; itens.push(n); document.getElementById('tot').innerText=`R$ ${total.toFixed(2)}`; document.getElementById('cart').classList.remove('hidden'); }
-        
         async function send(){
-            const cli = prompt("Seu nome?"); if(!cli) return;
+            const cli = prompt("Qual o seu nome?"); if(!cli) return;
             const res = await fetch(`/order/${sId}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({cliente:cli, total:total.toFixed(2), itens:itens.join(", ")}) });
             const data = await res.json();
-            iniciarAcompanhamento(data.order_id);
+            const msg = `*PEDIDO:* ${itens.join(", ")}\n*TOTAL:* R$ ${total.toFixed(2)}\n*CLIENTE:* ${cli}`;
+            window.open(`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(msg)}`);
+            iniciarStatus(data.order_id);
         }
-
-        function iniciarAcompanhamento(orderId) {
+        function iniciarStatus(id){
             document.getElementById('view-menu').classList.add('hidden');
             document.getElementById('view-status').classList.remove('hidden');
-            
-            // Conecta no WebSocket para ouvir a atualização do status
-            const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-            const ws = new WebSocket(`${protocol}://${window.location.host}/ws/${sId}`);
+            const ws = new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws/${sId}`);
             ws.onmessage = (e) => {
-                const update = JSON.parse(e.data);
-                if(update.id == orderId) {
-                    document.getElementById('order-status').innerText = update.status;
-                    if(update.status === 'Saiu para Entrega') new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play();
-                }
+                const d = JSON.parse(e.data);
+                if(d.id == id) document.getElementById('order-status').innerText = d.status;
             };
         }
         load();
