@@ -1,74 +1,65 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html>
 <head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Painel</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Admin</title><script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-900 text-white p-4">
-    <nav class="flex gap-2 mb-5">
-        <button onclick="tab('pedidos')" class="bg-orange-600 px-4 py-2 rounded">Pedidos</button>
-        <button onclick="tab('produtos')" class="bg-slate-700 px-4 py-2 rounded">Produtos</button>
-    </nav>
-
-    <div id="aba-pedidos">
-        <h2 class="font-bold mb-4">Pedidos em Tempo Real</h2>
-        <div id="lista-pedidos" class="space-y-2"></div>
-    </div>
-
-    <div id="aba-produtos" class="hidden">
-        <div class="bg-slate-800 p-4 rounded mb-5">
-            <input type="text" id="nome" placeholder="Nome" class="w-full p-2 mb-2 bg-slate-700 rounded">
-            <input type="number" id="preco" placeholder="Preço" class="w-full p-2 mb-2 bg-slate-700 rounded">
-            <button onclick="salvar()" class="w-full bg-green-600 p-2 rounded">Cadastrar Produto</button>
-        </div>
-        <div id="lista-produtos" class="space-y-2"></div>
-    </div>
-
-    <audio id="som" src="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3"></audio>
-
     <script>
-        const storeId = 1;
-        const som = document.getElementById('som');
-
-        function tab(t) {
-            document.getElementById('aba-pedidos').classList.toggle('hidden', t !== 'pedidos');
-            document.getElementById('aba-produtos').classList.toggle('hidden', t !== 'produtos');
-            if(t === 'produtos') carregar();
+        if(!localStorage.getItem('loja_id')) location.href='login.html';
+        const storeId = localStorage.getItem('loja_id');
+    </script>
+    <div class="max-w-lg mx-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="font-bold">Painel de Pedidos</h1>
+            <button onclick="localStorage.clear();location.href='login.html'" class="text-xs bg-red-600 px-3 py-1 rounded">Sair</button>
+        </div>
+        <nav class="flex gap-2 mb-6">
+            <button onclick="tab('ped')" class="flex-1 bg-orange-600 p-2 rounded font-bold">Pedidos</button>
+            <button onclick="tab('pro')" class="flex-1 bg-slate-700 p-2 rounded font-bold">Produtos</button>
+        </nav>
+        <div id="aba-ped" class="space-y-4"></div>
+        <div id="aba-pro" class="hidden">
+            <div class="bg-slate-800 p-4 rounded mb-4">
+                <input id="n" type="text" placeholder="Nome" class="w-full p-2 mb-2 bg-slate-700 rounded">
+                <input id="pr" type="number" placeholder="Preço" class="w-full p-2 mb-2 bg-slate-700 rounded">
+                <button onclick="add()" class="w-full bg-green-600 p-2 rounded font-bold">Salvar</button>
+            </div>
+            <div id="lista-p" class="space-y-2"></div>
+        </div>
+    </div>
+    <audio id="som" src="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3"></audio>
+    <script>
+        function tab(t){
+            document.getElementById('aba-ped').classList.toggle('hidden', t!=='ped');
+            document.getElementById('aba-pro').classList.toggle('hidden', t!=='pro');
+            if(t==='pro') loadP();
         }
-
-        async function salvar() {
-            const n = document.getElementById('nome').value;
-            const p = document.getElementById('preco').value;
-            try {
-                const res = await fetch(`/api/products/${storeId}`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({name: n, price: parseFloat(p)})
-                });
-                if(res.ok) { alert("Salvo!"); carregar(); }
-                else { alert("Erro ao salvar: " + res.status); }
-            } catch(e) { alert("Erro de conexão: " + e); }
-        }
-
-        async function carregar() {
+        async function loadP(){
             const res = await fetch(`/api/products/${storeId}`);
             const data = await res.json();
-            document.getElementById('lista-produtos').innerHTML = data.map(p => `
-                <div class="p-2 bg-slate-800 rounded border-l-4 border-green-500">${p.name} - R$ ${p.price}</div>
-            `).join('');
+            document.getElementById('lista-p').innerHTML = data.map(p=>`
+                <div class="p-3 bg-slate-800 rounded border-l-4 border-orange-500 flex justify-between">
+                    <span>${p.name}</span><b>R$ ${p.price.toFixed(2)}</b>
+                </div>`).join('');
         }
-
-        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-        const ws = new WebSocket(`${protocol}://${window.location.host}/ws/${storeId}`);
-        ws.onmessage = (e) => {
-            const d = JSON.parse(e.data);
-            som.play();
-            document.getElementById('lista-pedidos').insertAdjacentHTML('afterbegin', `
-                <div class="bg-white text-black p-4 rounded mb-2 font-bold">${d.cliente}: R$ ${d.total}</div>
-            `);
+        async function add(){
+            await fetch(`/api/products/${storeId}`, {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({name:n.value, price:parseFloat(pr.value)})
+            });
+            n.value=''; pr.value=''; loadP();
+        }
+        const ws = new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws/${storeId}`);
+        ws.onmessage=(e)=>{
+            const d = JSON.parse(e.data); som.play();
+            document.getElementById('aba-ped').insertAdjacentHTML('afterbegin',`
+                <div class="bg-white text-black p-4 rounded shadow-lg animate-bounce mb-2">
+                    <div class="flex justify-between"><b>${d.cliente}</b> <span class="text-green-600">R$ ${d.total}</span></div>
+                    <p class="text-sm">${d.itens}</p>
+                </div>`);
         };
-        document.onclick = () => { som.play(); som.pause(); };
+        document.body.onclick=()=>{som.play();som.pause();};
     </script>
 </body>
-    </html>
+</html>
