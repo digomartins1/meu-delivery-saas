@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8"><title>Painel Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white p-5">
+    <h1 class="text-xl font-bold border-b border-slate-700 pb-3 mb-5">Pedidos em Tempo Real</h1>
+    <div id="lista" class="space-y-3"></div>
+    <audio id="som" src="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3"></audio>
+    <script>
+        const som = document.getElementById('som');
+        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const ws = new WebSocket(`${protocol}://${window.location.host}/ws/1`);
+        
+        ws.onmessage = (e) => {
+            const d = JSON.parse(e.data);
+            som.play();
+            document.getElementById('lista').insertAdjacentHTML('afterbegin', 
+                `<div class="bg-white text-black p-4 rounded shadow-lg animate-bounce">
+                    <b>${d.cliente}</b> - R$ ${d.total}<br><small>${d.itens}</small>
+                </div>`);
+        };
+        document.body.onclick = () => { som.play(); som.pause(); };
+    </script>
+</body>
+</html>
