@@ -17,16 +17,27 @@ class Product(Base):
     __tablename__ = "products"
     id = Column(Integer, primary_key=True); name = Column(String)
     price = Column(Float); store_id = Column(Integer)
-    category = Column(String, default="Lanches") # NOVO CAMPO
+    category = Column(String, default="Lanches") # O campo que causou o conflito
 
-Base.metadata.create_all(bind=engine)
-
-class LoginData(BaseModel): username: str; password: str
-class ProductCreate(BaseModel): name: str; price: float; category: str
-
-app = FastAPI()
+# --- COMANDO DE RESET (USAR APENAS UMA VEZ) ---
+@app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+@app.get("/api/db-reset")
+def db_reset(db: Session = Depends(get_db)):
+    # Este comando apaga tudo e recria com as colunas novas
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    return "BANCO RESETADO! Agora a coluna CATEGORY existe. Rode o /api/setup novamente."
+
+@app.get("/api/setup")
+def setup(db: Session = Depends(get_db)):
+    if not db.query(User).filter(User.username == "admin").first():
+        db.add(User(username="admin", password="123", store_id=1)); db.commit()
+        return "Admin criado com sucesso!"
+    return "Admin já existe."
+
+# --- GERENCIADOR WEBSOCKET ---
 class Manager:
     def __init__(self): self.cons = {}
     async def connect(self, ws, s_id):
@@ -41,18 +52,8 @@ class Manager:
 
 manager = Manager()
 
-@app.post("/api/login")
-def login(data: LoginData, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == data.username, User.password == data.password).first()
-    if not user: raise HTTPException(status_code=401)
-    return {"store_id": user.store_id, "username": user.username}
-
-@app.get("/api/setup")
-def setup(db: Session = Depends(get_db)):
-    if not db.query(User).filter(User.username == "admin").first():
-        db.add(User(username="admin", password="123", store_id=1)); db.commit()
-        return "Criado: admin / 123"
-    return "Já existe"
+# --- ROTAS API ---
+class ProductCreate(BaseModel): name: str; price: float; category: str
 
 @app.get("/api/products/{s_id}")
 def list_p(s_id: int, db: Session = Depends(get_db)):
@@ -62,6 +63,12 @@ def list_p(s_id: int, db: Session = Depends(get_db)):
 def add_p(s_id: int, p: ProductCreate, db: Session = Depends(get_db)):
     db.add(Product(name=p.name, price=p.price, store_id=s_id, category=p.category)); db.commit()
     return {"ok": True}
+
+@app.post("/api/login")
+def login(data: dict, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == data['username'], User.password == data['password']).first()
+    if not user: raise HTTPException(status_code=401)
+    return {"store_id": user.store_id, "username": user.username}
 
 @app.post("/order/{s_id}")
 async def order(s_id: int, data: dict):
