@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cardápio Digital</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-5">
+    <div class="max-w-md mx-auto">
+        <h1 class="text-2xl font-bold text-orange-600 mb-6">Lanchonete Express</h1>
+        <div class="bg-white p-4 rounded-lg shadow mb-4 flex justify-between items-center">
+            <span>Burger Clássico - R$ 25,00</span>
+            <button onclick="enviar('Burger', 25)" class="bg-orange-500 text-white px-4 py-2 rounded">Pedir</button>
+        </div>
+    </div>
+    <script>
+        async function enviar(item, preco) {
+            const nome = prompt("Seu nome?");
+            if(!nome) return;
+            await fetch(`/order/1`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({cliente: nome, itens: item, total: preco})
+            });
+            alert("Pedido enviado!");
+        }
+    </script>
+</body>
+</html>
