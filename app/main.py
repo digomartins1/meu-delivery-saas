@@ -3,74 +3,35 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from .database import Base, engine, get_db
-from sqlalchemy import Column, Integer, String, Float
+from sqlalchemy import Column, Integer, String, Float, Text
 from pydantic import BaseModel
 import json
 
-# 1. Definição do Banco
+# --- MODELOS ---
 class User(Base):
-    __tablename__ = "users"
-    id = Column(Integer, primary_key=True)
-    username = Column(String, unique=True)
-    password = Column(String)
-    store_id = Column(Integer)
+    __tablename__ = "users"; id = Column(Integer, primary_key=True)
+    username = Column(String, unique=True); password = Column(String); store_id = Column(Integer)
 
 class Product(Base):
-    __tablename__ = "products"
-    id = Column(Integer, primary_key=True)
-    name = Column(String)
-    price = Column(Float)
-    store_id = Column(Integer)
-    category = Column(String, default="Lanches")
+    __tablename__ = "products"; id = Column(Integer, primary_key=True)
+    name = Column(String); price = Column(Float); store_id = Column(Integer)
+    category = Column(String); image_url = Column(String, nullable=True)
 
-# Criação das tabelas
+class Order(Base):
+    __tablename__ = "orders"; id = Column(Integer, primary_key=True)
+    cliente = Column(String); itens = Column(Text); total = Column(String)
+    status = Column(String, default="Pendente"); store_id = Column(Integer)
+
 Base.metadata.create_all(bind=engine)
 
-# 2. Configuração do App
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# 3. ROTAS DE EMERGÊNCIA (ESTÃO NO TOPO PARA FUNCIONAR)
-@app.get("/api/db-reset")
-def db_reset(db: Session = Depends(get_db)):
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    return {"msg": "BANCO RESETADO COM SUCESSO"}
+# --- SCHEMAS ---
+class ProductCreate(BaseModel): name: str; price: float; category: str; image_url: str = None
+class OrderStatusUpdate(BaseModel): status: str
 
-@app.get("/api/setup")
-def setup(db: Session = Depends(get_db)):
-    if not db.query(User).filter(User.username == "admin").first():
-        db.add(User(username="admin", password="123", store_id=1))
-        db.commit()
-        return {"msg": "ADMIN CRIADO: user admin / senha 123"}
-    return {"msg": "ADMIN JA EXISTE"}
-
-# 4. ROTAS DE PRODUTOS E LOGIN
-class LoginData(BaseModel): username: str; password: str
-class ProductCreate(BaseModel): name: str; price: float; category: str
-
-@app.post("/api/login")
-def login(data: LoginData, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == data.username, User.password == data.password).first()
-    if not user: raise HTTPException(status_code=401)
-    return {"status": "ok", "store_id": user.store_id, "username": user.username}
-
-@app.get("/api/products/{s_id}")
-def list_p(s_id: int, db: Session = Depends(get_db)):
-    return db.query(Product).filter(Product.store_id == s_id).all()
-
-@app.post("/api/products/{s_id}")
-def add_p(s_id: int, p: ProductCreate, db: Session = Depends(get_db)):
-    db.add(Product(name=p.name, price=p.price, store_id=s_id, category=p.category))
-    db.commit()
-    return {"status": "ok"}
-
-@app.post("/order/{s_id}")
-async def order(s_id: int, data: dict):
-    await manager.send(s_id, data)
-    return {"ok": True}
-
-# 5. WEBSOCKET
+# --- WEBSOCKET ---
 class Manager:
     def __init__(self): self.cons = {}
     async def connect(self, ws, s_id):
@@ -85,6 +46,43 @@ class Manager:
 
 manager = Manager()
 
+# --- ROTAS ---
+@app.get("/api/db-reset")
+def db_reset(db: Session = Depends(get_db)):
+    Base.metadata.drop_all(bind=engine); Base.metadata.create_all(bind=engine)
+    return "BANCO ZERADO"
+
+@app.get("/api/setup")
+def setup(db: Session = Depends(get_db)):
+    if not db.query(User).first():
+        db.add(User(username="admin", password="123", store_id=1)); db.commit()
+    return "OK"
+
+@app.get("/api/products/{s_id}")
+def list_p(s_id: int, db: Session = Depends(get_db)):
+    return db.query(Product).filter(Product.store_id == s_id).all()
+
+@app.post("/api/products/{s_id}")
+def add_p(s_id: int, p: ProductCreate, db: Session = Depends(get_db)):
+    db.add(Product(**p.dict(), store_id=s_id)); db.commit(); return "OK"
+
+@app.get("/api/orders/{s_id}")
+def list_orders(s_id: int, db: Session = Depends(get_db)):
+    return db.query(Order).filter(Order.store_id == s_id).order_by(Order.id.desc()).all()
+
+@app.post("/order/{s_id}")
+async def create_order(s_id: int, data: dict, db: Session = Depends(get_db)):
+    new_order = Order(cliente=data['cliente'], itens=data['itens'], total=data['total'], store_id=s_id)
+    db.add(new_order); db.commit(); db.refresh(new_order)
+    payload = {"id": new_order.id, "cliente": new_order.cliente, "itens": new_order.itens, "total": new_order.total, "status": new_order.status}
+    await manager.send(s_id, payload); return "OK"
+
+@app.post("/api/orders/{o_id}/status")
+def update_status(o_id: int, data: OrderStatusUpdate, db: Session = Depends(get_db)):
+    order = db.query(Order).filter(Order.id == o_id).first()
+    if order: order.status = data.status; db.commit()
+    return "OK"
+
 @app.websocket("/ws/{s_id}")
 async def ws_route(ws: WebSocket, s_id: int):
     await manager.connect(ws, s_id)
@@ -92,9 +90,7 @@ async def ws_route(ws: WebSocket, s_id: int):
         while True: await ws.receive_text()
     except WebSocketDisconnect: manager.disconnect(ws, s_id)
 
-# 6. ARQUIVOS ESTÁTICOS (POR ÚLTIMO)
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
 @app.get("/")
 def home():
     from fastapi.responses import RedirectResponse
