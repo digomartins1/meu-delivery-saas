@@ -44,12 +44,11 @@ class Manager:
 
 manager = Manager()
 
-# --- ROTAS API ---
-
+# --- ROTAS DE UTILIDADE ---
 @app.get("/api/db-reset")
 def db_reset(db: Session = Depends(get_db)):
     Base.metadata.drop_all(bind=engine); Base.metadata.create_all(bind=engine)
-    return "BANCO RESETADO"
+    return "BANCO ZERADO"
 
 @app.get("/api/setup")
 def setup(db: Session = Depends(get_db)):
@@ -63,6 +62,7 @@ async def login(data: dict, db: Session = Depends(get_db)):
     if not u: raise HTTPException(status_code=401)
     return {"store_id": u.store_id, "username": u.username}
 
+# --- ROTAS DE PRODUTOS (CRUD) ---
 @app.get("/api/products/{s_id}")
 def list_p(s_id: int, db: Session = Depends(get_db)):
     return db.query(Product).filter(Product.store_id == s_id).all()
@@ -71,15 +71,21 @@ def list_p(s_id: int, db: Session = Depends(get_db)):
 def add_p(s_id: int, data: dict, db: Session = Depends(get_db)):
     db.add(Product(**data, store_id=s_id)); db.commit(); return "OK"
 
-# Rota Crítica para o Rastreamento do Cliente
-@app.get("/api/order-status/{o_id}")
-def get_order_status(o_id: int, db: Session = Depends(get_db)):
-    o = db.query(Order).filter(Order.id == o_id).first()
-    if not o: raise HTTPException(status_code=404)
-    return {"id": o.id, "status": o.status, "cliente": o.cliente}
+@app.put("/api/products/{p_id}")
+def update_p(p_id: int, data: dict, db: Session = Depends(get_db)):
+    p = db.query(Product).filter(Product.id == p_id).first()
+    if p:
+        p.name=data['name']; p.price=data['price']; p.category=data['category']; p.image_url=data.get('image_url')
+        db.commit()
+    return "OK"
 
+@app.delete("/api/products/{p_id}")
+def delete_p(p_id: int, db: Session = Depends(get_db)):
+    p = db.query(Product).filter(Product.id == p_id).first(); db.delete(p); db.commit(); return "OK"
+
+# --- ROTAS DE PEDIDOS ---
 @app.get("/api/orders/{s_id}")
-def list_o(s_id: int, db: Session = Depends(get_db)):
+def list_active(s_id: int, db: Session = Depends(get_db)):
     return db.query(Order).filter(Order.store_id == s_id, Order.status != "Concluído").order_by(Order.id.desc()).all()
 
 @app.get("/api/history/{s_id}")
@@ -87,11 +93,16 @@ def get_h(s_id: int, db: Session = Depends(get_db)):
     limite = datetime.now() - timedelta(days=15)
     return db.query(Order).filter(Order.store_id == s_id, Order.created_at >= limite).all()
 
+@app.get("/api/order-status/{o_id}")
+def get_status(o_id: int, db: Session = Depends(get_db)):
+    o = db.query(Order).filter(Order.id == o_id).first()
+    return {"status": o.status} if o else HTTPException(status_code=404)
+
 @app.post("/order/{s_id}")
 async def create_o(s_id: int, data: dict, db: Session = Depends(get_db)):
     o = Order(cliente=data['cliente'], itens=data['itens'], total=data['total'], store_id=s_id)
     db.add(o); db.commit(); db.refresh(o)
-    await manager.send(s_id, {"id": o.id, "cliente": o.cliente, "status": "update"})
+    await manager.send(s_id, {"id": o.id, "status": "update"})
     return {"order_id": o.id}
 
 @app.post("/api/orders/{o_id}/status")
@@ -110,7 +121,6 @@ async def ws_route(ws: WebSocket, s_id: int):
     except WebSocketDisconnect: manager.disconnect(ws, s_id)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
 @app.get("/")
 def home():
     from fastapi.responses import RedirectResponse
