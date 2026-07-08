@@ -19,14 +19,19 @@ class Product(Base):
     category = Column(String); image_url = Column(String, nullable=True)
     description = Column(Text, nullable=True)
 
+class Customer(Base): # NOVO: Cadastro de Clientes para Fidelidade
+    __tablename__ = "customers"; id = Column(Integer, primary_key=True)
+    phone = Column(String, index=True); name = Column(String)
+    stamps = Column(Integer, default=0); store_id = Column(Integer)
+
 class Order(Base):
     __tablename__ = "orders"; id = Column(Integer, primary_key=True)
-    cliente = Column(String); itens = Column(Text); total = Column(String)
+    cliente = Column(String); phone = Column(String, nullable=True) # Adicionado Telefone
+    itens = Column(Text); total = Column(String)
     status = Column(String, default="Pendente"); store_id = Column(Integer)
     created_at = Column(DateTime, default=datetime.now)
 
 Base.metadata.create_all(bind=engine)
-
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
@@ -44,7 +49,14 @@ class Manager:
 
 manager = Manager()
 
-# --- ROTAS API ---
+# --- ROTAS FIDELIDADE ---
+@app.get("/api/loyalty/{s_id}/{phone}")
+def get_loyalty(s_id: int, phone: str, db: Session = Depends(get_db)):
+    c = db.query(Customer).filter(Customer.phone == phone, Customer.store_id == s_id).first()
+    if not c: return {"stamps": 0, "name": "Novo Cliente"}
+    return {"stamps": c.stamps, "name": c.name}
+
+# --- ROTAS API GERAIS (Login, Produtos...) ---
 @app.get("/api/db-reset")
 def db_reset(db: Session = Depends(get_db)):
     Base.metadata.drop_all(bind=engine); Base.metadata.create_all(bind=engine)
@@ -52,28 +64,16 @@ def db_reset(db: Session = Depends(get_db)):
 
 @app.get("/api/setup")
 def setup(db: Session = Depends(get_db)):
-    if not db.query(User).filter(User.username == "admin").first():
+    if not db.query(User).first():
         db.add(User(username="admin", password="123", store_id=1, is_open=True))
-        db.commit(); return "CRIADO: admin / 123"
+        db.commit()
     return "OK"
 
 @app.post("/api/login")
 async def login(data: dict, db: Session = Depends(get_db)):
     u = db.query(User).filter(User.username == data['username'], User.password == data['password']).first()
-    if not u: raise HTTPException(status_code=401)
+    if not u: raise HTTPException(401)
     return {"store_id": u.store_id, "username": u.username}
-
-@app.get("/api/store-status/{s_id}")
-def get_st_loja(s_id: int, db: Session = Depends(get_db)):
-    u = db.query(User).filter(User.store_id == s_id).first()
-    return {"is_open": u.is_open if u else True}
-
-@app.post("/api/store-status/{s_id}")
-async def toggle_loja(s_id: int, data: dict, db: Session = Depends(get_db)):
-    u = db.query(User).filter(User.store_id == s_id).first()
-    if u: u.is_open = data['is_open']; db.commit()
-    await manager.send(s_id, {"type": "store_status", "is_open": u.is_open})
-    return "OK"
 
 @app.get("/api/products/{s_id}")
 def list_p(s_id: int, db: Session = Depends(get_db)):
@@ -98,32 +98,36 @@ def del_p(p_id: int, db: Session = Depends(get_db)):
 def list_o(s_id: int, db: Session = Depends(get_db)):
     return db.query(Order).filter(Order.store_id == s_id, Order.status != "Concluído").order_by(Order.id.desc()).all()
 
-@app.get("/api/history/{s_id}")
-def get_h(s_id: int, db: Session = Depends(get_db)):
-    lim = datetime.now() - timedelta(days=15)
-    return db.query(Order).filter(Order.store_id == s_id, Order.created_at >= lim).all()
-
-@app.get("/api/order-status/{o_id}")
-def get_o_st(o_id: int, db: Session = Depends(get_db)):
-    o = db.query(Order).filter(Order.id == o_id).first()
-    return {"status": o.status} if o else HTTPException(404)
-
 @app.post("/order/{s_id}")
 async def create_o(s_id: int, data: dict, db: Session = Depends(get_db)):
     u = db.query(User).filter(User.store_id == s_id).first()
-    if not u.is_open: raise HTTPException(403, "Fechado")
-    o = Order(cliente=data['cliente'], itens=data['itens'], total=data['total'], store_id=s_id)
+    if not u.is_open: raise HTTPException(403)
+    o = Order(cliente=data['cliente'], phone=data.get('phone'), itens=data['itens'], total=data['total'], store_id=s_id)
     db.add(o); db.commit(); db.refresh(o)
-    await manager.send(s_id, {"id": o.id, "status": "Pendente", "cliente": o.cliente, "total": o.total, "itens": o.itens})
+    await manager.send(s_id, {"id": o.id, "status": "update"})
     return {"order_id": o.id}
 
 @app.post("/api/orders/{o_id}/status")
 async def up_st(o_id: int, data: dict, db: Session = Depends(get_db)):
     o = db.query(Order).filter(Order.id == o_id).first()
     if o:
-        o.status = data['status']; db.commit()
+        o.status = data['status']
+        # Se concluir, ganha carimbo
+        if o.status == "Concluído" and o.phone:
+            c = db.query(Customer).filter(Customer.phone == o.phone, Customer.store_id == o.store_id).first()
+            if not c:
+                c = Customer(phone=o.phone, name=o.cliente, store_id=o.store_id, stamps=1)
+                db.add(c)
+            else:
+                c.stamps += 1
+        db.commit()
         await manager.send(o.store_id, {"id": o.id, "status": o.status})
     return "OK"
+
+@app.get("/api/order-status/{o_id}")
+def get_o_st(o_id: int, db: Session = Depends(get_db)):
+    o = db.query(Order).filter(Order.id == o_id).first()
+    return {"status": o.status} if o else HTTPException(404)
 
 @app.websocket("/ws/{s_id}")
 async def ws_route(ws: WebSocket, s_id: int):
