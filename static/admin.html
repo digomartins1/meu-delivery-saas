@@ -2,36 +2,34 @@
 <html>
 <head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Painel</title><script src="https://cdn.tailwindcss.com"></script>
+    <title>Admin Master</title><script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-900 text-white p-4">
-    <script>
-        if(!localStorage.getItem('loja_id')) location.href='login.html';
-        const storeId = localStorage.getItem('loja_id');
-    </script>
+    <script>if(!localStorage.getItem('loja_id')) location.href='login.html'; const storeId = localStorage.getItem('loja_id');</script>
     <div class="max-w-lg mx-auto">
         <header class="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
             <h1 class="font-black italic text-orange-500">PAINEL ADMIN</h1>
-            <button onclick="localStorage.clear();location.href='login.html'" class="text-[10px] bg-red-600 px-3 py-1 rounded font-bold uppercase">Sair</button>
+            <button onclick="localStorage.clear();location.href='login.html'" class="text-[10px] bg-red-600 px-3 py-1 rounded font-bold uppercase tracking-widest">Sair</button>
         </header>
-        <nav class="flex gap-1 mb-8 text-[10px] font-bold">
-            <button onclick="tab('ped')" id="t-ped" class="flex-1 bg-orange-600 p-3 rounded-l-xl uppercase">Pedidos</button>
-            <button onclick="tab('pro')" id="t-pro" class="flex-1 bg-slate-800 p-3 uppercase border-x border-slate-700">Produtos</button>
-            <button onclick="tab('his')" id="t-his" class="flex-1 bg-slate-800 p-3 rounded-r-xl uppercase tracking-tighter">Histórico 15d</button>
+        <nav class="flex gap-1 mb-8 text-[10px] font-bold uppercase">
+            <button onclick="tab('ped')" id="t-ped" class="flex-1 bg-orange-600 p-3 rounded-l-xl">Pedidos</button>
+            <button onclick="tab('pro')" id="t-pro" class="flex-1 bg-slate-800 p-3">Produtos</button>
+            <button onclick="tab('his')" id="t-his" class="flex-1 bg-slate-800 p-3 rounded-r-xl">Histórico</button>
         </nav>
         <div id="aba-ped" class="space-y-4"></div>
         <div id="aba-his" class="hidden space-y-2"></div>
         <div id="aba-pro" class="hidden">
-            <div class="bg-slate-800 p-5 rounded-2xl mb-6 space-y-3">
-                <input id="n" type="text" placeholder="Nome do Lanche" class="w-full p-3 bg-slate-700 rounded-xl outline-none">
-                <input id="pr" type="number" placeholder="Preço R$" class="w-full p-3 bg-slate-700 rounded-xl outline-none">
-                <input id="img" type="text" placeholder="URL da Imagem" class="w-full p-3 bg-slate-700 rounded-xl outline-none text-xs">
-                <select id="cat" class="w-full p-3 bg-slate-700 rounded-xl outline-none">
-                    <option>Lanches</option><option>Bebidas</option><option>Doces</option><option>Combos</option>
-                </select>
-                <button onclick="addP()" class="w-full bg-green-600 p-3 rounded-xl font-bold">SALVAR PRODUTO</button>
+            <div id="form-p" class="bg-slate-800 p-5 rounded-2xl mb-6 space-y-3 border-2 border-slate-700">
+                <h2 id="form-t" class="text-xs font-bold text-orange-500 uppercase italic">Novo Produto</h2>
+                <input id="n" type="text" placeholder="Nome" class="w-full p-3 bg-slate-700 rounded-xl outline-none">
+                <input id="pr" type="number" placeholder="Preço" class="w-full p-3 bg-slate-700 rounded-xl outline-none">
+                <input id="img" type="text" placeholder="URL Imagem" class="w-full p-3 bg-slate-700 rounded-xl outline-none text-xs">
+                <select id="cat" class="w-full p-3 bg-slate-700 rounded-xl outline-none"><option>Lanches</option><option>Bebidas</option><option>Doces</option></select>
+                <input type="hidden" id="eid">
+                <button onclick="save()" id="s-btn" class="w-full bg-green-600 p-3 rounded-xl font-bold">SALVAR</button>
+                <button onclick="resetF()" id="c-btn" class="hidden w-full bg-slate-600 p-2 rounded-xl text-xs font-bold">CANCELAR EDIÇÃO</button>
             </div>
-            <div id="lista-p" class="space-y-2 text-xs text-slate-500"></div>
+            <div id="lista-p" class="space-y-3"></div>
         </div>
     </div>
     <audio id="som" src="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3"></audio>
@@ -42,47 +40,58 @@
             document.getElementById('aba-his').classList.toggle('hidden', t!=='his');
             document.querySelectorAll('nav button').forEach(b=>b.classList.replace('bg-orange-600','bg-slate-800'));
             document.getElementById('t-'+t).classList.replace('bg-slate-800','bg-orange-600');
-            if(t==='his') loadHistory(); else if(t==='pro') loadP(); else loadOrders();
+            if(t==='his') loadH(); else if(t==='pro') loadP(); else loadO();
         }
         async function loadP(){
             const res = await fetch(`/api/products/${storeId}`);
             const data = await res.json();
-            document.getElementById('lista-p').innerHTML = data.map(p=>`<div class="p-2 border-b border-slate-800">${p.name} - R$ ${p.price}</div>`).join('');
+            document.getElementById('lista-p').innerHTML = data.map(p=>`
+                <div class="p-4 bg-slate-800 rounded-2xl flex justify-between items-center border border-slate-700">
+                    <div class="text-sm font-bold">${p.name}<br><span class="text-orange-500 font-black">R$ ${p.price.toFixed(2)}</span></div>
+                    <div class="flex gap-2">
+                        <button onclick='editP(${JSON.stringify(p)})' class="text-[10px] bg-blue-600/20 text-blue-400 p-2 rounded font-bold uppercase">Editar</button>
+                        <button onclick="delP(${p.id})" class="text-[10px] bg-red-600/20 text-red-400 p-2 rounded font-bold uppercase">Excluir</button>
+                    </div>
+                </div>`).join('');
         }
-        async function addP(){
-            await fetch(`/api/products/${storeId}`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:n.value, price:parseFloat(pr.value), category:cat.value, image_url:img.value})});
-            n.value=''; pr.value=''; img.value=''; loadP();
+        function editP(p){
+            document.getElementById('n').value=p.name; document.getElementById('pr').value=p.price;
+            document.getElementById('img').value=p.image_url; document.getElementById('cat').value=p.category;
+            document.getElementById('eid').value=p.id; document.getElementById('form-t').innerText="Editando Produto";
+            document.getElementById('s-btn').innerText="ATUALIZAR"; document.getElementById('c-btn').classList.remove('hidden');
+            window.scrollTo(0,0);
         }
-        async function loadOrders(){
+        function resetF(){ document.getElementById('eid').value=""; document.getElementById('form-t').innerText="Novo Produto"; document.getElementById('s-btn').innerText="SALVAR"; document.getElementById('c-btn').classList.add('hidden'); document.getElementById('n').value=""; document.getElementById('pr').value=""; }
+        async function save(){
+            const id = document.getElementById('eid').value;
+            const met = id ? 'PUT' : 'POST'; const url = id ? `/api/products/${id}` : `/api/products/${storeId}`;
+            await fetch(url, {method:met, headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:n.value, price:parseFloat(pr.value), category:cat.value, image_url:img.value})});
+            resetF(); loadP();
+        }
+        async function delP(id){ if(confirm("Excluir?")){ await fetch(`/api/products/${id}`,{method:'DELETE'}); loadP(); } }
+        async function loadO(){
             const res = await fetch(`/api/orders/${storeId}`);
             const data = await res.json();
             document.getElementById('aba-ped').innerHTML = data.map(o=>`
                 <div class="bg-white text-black p-5 rounded-2xl border-l-8 ${o.status=='Preparando'?'border-blue-500':'border-orange-500'}">
                     <div class="flex justify-between font-bold"><span>${o.cliente}</span><span class="text-green-600">R$ ${o.total}</span></div>
-                    <p class="text-[10px] text-gray-400 mt-1 mb-4 uppercase font-black tracking-widest">${o.status} - ${o.itens}</p>
+                    <p class="text-[10px] text-gray-400 mt-1 mb-4 uppercase font-black">${o.status} - ${o.itens}</p>
                     <div class="flex gap-1">
-                        <button onclick="setStatus(${o.id},'Preparando')" class="flex-1 bg-blue-100 text-blue-600 p-2 rounded-lg text-[10px] font-bold">PREPARAR</button>
-                        <button onclick="setStatus(${o.id},'Saiu para Entrega')" class="flex-1 bg-orange-100 text-orange-600 p-2 rounded-lg text-[10px] font-bold">ENTREGA</button>
-                        <button onclick="setStatus(${o.id},'Concluído')" class="flex-1 bg-green-100 text-green-600 p-2 rounded-lg text-[10px] font-bold">OK</button>
+                        <button onclick="setS(${o.id},'Preparando')" class="flex-1 bg-blue-100 text-blue-600 p-2 rounded-lg text-[10px] font-bold">PREPARAR</button>
+                        <button onclick="setS(${o.id},'Saiu para Entrega')" class="flex-1 bg-orange-100 text-orange-600 p-2 rounded-lg text-[10px] font-bold">ENTREGA</button>
+                        <button onclick="setS(${o.id},'Concluído')" class="flex-1 bg-green-100 text-green-600 p-2 rounded-lg text-[10px] font-bold">OK</button>
                     </div>
                 </div>`).join('');
         }
-        async function setStatus(id, st){
-            await fetch(`/api/orders/${id}/status`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:st})});
-            loadOrders();
-        }
-        async function loadHistory(){
+        async function setS(id, st){ await fetch(`/api/orders/${id}/status`,{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:st})}); loadO(); }
+        async function loadH(){
             const res = await fetch(`/api/history/${storeId}`);
             const data = await res.json();
-            document.getElementById('aba-his').innerHTML = data.map(o=>`
-                <div class="bg-slate-800 p-3 rounded-xl flex justify-between text-xs">
-                    <span>${o.cliente}</span><b class="text-green-400">R$ ${o.total}</b>
-                </div>`).join('');
+            document.getElementById('aba-his').innerHTML = data.map(o=>`<div class="bg-slate-800 p-3 rounded-xl flex justify-between text-xs font-bold uppercase"><span>${o.cliente}</span><span class="text-green-500">R$ ${o.total}</span></div>`).join('');
         }
         const ws = new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws/${storeId}`);
-        ws.onmessage=()=>{ document.getElementById('som').play(); loadOrders(); };
-        loadOrders();
-        document.body.onclick=()=>document.getElementById('som').play().then(()=>document.getElementById('som').pause());
+        ws.onmessage=()=>{ document.getElementById('som').play(); loadO(); };
+        loadO(); document.body.onclick=()=>document.getElementById('som').play().then(()=>document.getElementById('som').pause());
     </script>
 </body>
 </html>
