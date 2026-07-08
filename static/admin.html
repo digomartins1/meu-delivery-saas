@@ -2,32 +2,39 @@
 <html>
 <head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Master</title><script src="https://cdn.tailwindcss.com"></script>
+    <title>Admin Panel</title><script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-900 text-white p-4">
     <script>if(!localStorage.getItem('loja_id')) location.href='login.html'; const storeId = localStorage.getItem('loja_id');</script>
     <div class="max-w-lg mx-auto">
         <header class="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
             <h1 class="font-black italic text-orange-500">PAINEL ADMIN</h1>
-            <button onclick="localStorage.clear();location.href='login.html'" class="text-[10px] bg-red-600 px-3 py-1 rounded font-bold uppercase tracking-widest">Sair</button>
+            <button onclick="localStorage.clear();location.href='login.html'" class="text-[10px] bg-red-600 px-3 py-1 rounded font-bold uppercase">Sair</button>
         </header>
         <nav class="flex gap-1 mb-8 text-[10px] font-bold uppercase">
             <button onclick="tab('ped')" id="t-ped" class="flex-1 bg-orange-600 p-3 rounded-l-xl">Pedidos</button>
             <button onclick="tab('pro')" id="t-pro" class="flex-1 bg-slate-800 p-3">Produtos</button>
             <button onclick="tab('his')" id="t-his" class="flex-1 bg-slate-800 p-3 rounded-r-xl">Histórico</button>
         </nav>
+
         <div id="aba-ped" class="space-y-4"></div>
         <div id="aba-his" class="hidden space-y-2"></div>
+
         <div id="aba-pro" class="hidden">
-            <div id="form-p" class="bg-slate-800 p-5 rounded-2xl mb-6 space-y-3 border-2 border-slate-700">
+            <div class="bg-slate-800 p-5 rounded-2xl mb-6 space-y-3 border-2 border-slate-700">
                 <h2 id="form-t" class="text-xs font-bold text-orange-500 uppercase italic">Novo Produto</h2>
-                <input id="n" type="text" placeholder="Nome" class="w-full p-3 bg-slate-700 rounded-xl outline-none">
-                <input id="pr" type="number" placeholder="Preço" class="w-full p-3 bg-slate-700 rounded-xl outline-none">
-                <input id="img" type="text" placeholder="URL Imagem" class="w-full p-3 bg-slate-700 rounded-xl outline-none text-xs">
-                <select id="cat" class="w-full p-3 bg-slate-700 rounded-xl outline-none"><option>Lanches</option><option>Bebidas</option><option>Doces</option></select>
+                <input id="n" type="text" placeholder="Nome do Lanche" class="w-full p-3 bg-slate-700 rounded-xl outline-none">
+                <textarea id="desc" placeholder="Descrição (ingredientes, etc)" class="w-full p-3 bg-slate-700 rounded-xl outline-none text-sm h-20"></textarea>
+                <input id="pr" type="number" placeholder="Preço R$" class="w-full p-3 bg-slate-700 rounded-xl outline-none">
+                <input id="img" type="text" placeholder="URL da Imagem" class="w-full p-3 bg-slate-700 rounded-xl outline-none text-[10px]">
+                <select id="cat" class="w-full p-3 bg-slate-700 rounded-xl outline-none text-sm">
+                    <option>Lanches</option><option>Bebidas</option><option>Doces</option><option>Acompanhamentos</option>
+                </select>
                 <input type="hidden" id="eid">
-                <button onclick="save()" id="s-btn" class="w-full bg-green-600 p-3 rounded-xl font-bold">SALVAR</button>
-                <button onclick="resetF()" id="c-btn" class="hidden w-full bg-slate-600 p-2 rounded-xl text-xs font-bold">CANCELAR EDIÇÃO</button>
+                <div class="flex gap-2">
+                    <button id="c-btn" onclick="resetF()" class="hidden flex-1 bg-slate-600 p-3 rounded-xl font-bold text-xs uppercase">Cancelar</button>
+                    <button id="s-btn" onclick="save()" class="flex-[2] bg-green-600 p-3 rounded-xl font-bold uppercase">Salvar</button>
+                </div>
             </div>
             <div id="lista-p" class="space-y-3"></div>
         </div>
@@ -46,26 +53,52 @@
             const res = await fetch(`/api/products/${storeId}`);
             const data = await res.json();
             document.getElementById('lista-p').innerHTML = data.map(p=>`
-                <div class="p-4 bg-slate-800 rounded-2xl flex justify-between items-center border border-slate-700">
-                    <div class="text-sm font-bold">${p.name}<br><span class="text-orange-500 font-black">R$ ${p.price.toFixed(2)}</span></div>
+                <div class="p-4 bg-slate-800 rounded-2xl border border-slate-700 flex justify-between items-center">
+                    <div>
+                        <p class="font-bold text-sm">${p.name}</p>
+                        <p class="text-[10px] text-slate-500 italic">${p.description || 'Sem descrição'}</p>
+                        <p class="text-orange-500 font-black text-xs mt-1">R$ ${p.price.toFixed(2)}</p>
+                    </div>
                     <div class="flex gap-2">
-                        <button onclick='editP(${JSON.stringify(p)})' class="text-[10px] bg-blue-600/20 text-blue-400 p-2 rounded font-bold uppercase">Editar</button>
-                        <button onclick="delP(${p.id})" class="text-[10px] bg-red-600/20 text-red-400 p-2 rounded font-bold uppercase">Excluir</button>
+                        <button onclick='editP(${JSON.stringify(p)})' class="bg-blue-600/20 text-blue-400 p-2 rounded text-[10px] font-bold uppercase">Editar</button>
+                        <button onclick="delP(${p.id})" class="bg-red-600/20 text-red-400 p-2 rounded text-[10px] font-bold uppercase">Excluir</button>
                     </div>
                 </div>`).join('');
         }
         function editP(p){
-            document.getElementById('n').value=p.name; document.getElementById('pr').value=p.price;
-            document.getElementById('img').value=p.image_url; document.getElementById('cat').value=p.category;
-            document.getElementById('eid').value=p.id; document.getElementById('form-t').innerText="Editando Produto";
-            document.getElementById('s-btn').innerText="ATUALIZAR"; document.getElementById('c-btn').classList.remove('hidden');
+            document.getElementById('n').value=p.name; 
+            document.getElementById('desc').value=p.description || '';
+            document.getElementById('pr').value=p.price;
+            document.getElementById('img').value=p.image_url || ''; 
+            document.getElementById('cat').value=p.category;
+            document.getElementById('eid').value=p.id; 
+            document.getElementById('form-t').innerText="Editando Produto";
+            document.getElementById('s-btn').innerText="ATUALIZAR"; 
+            document.getElementById('c-btn').classList.remove('hidden');
             window.scrollTo(0,0);
         }
-        function resetF(){ document.getElementById('eid').value=""; document.getElementById('form-t').innerText="Novo Produto"; document.getElementById('s-btn').innerText="SALVAR"; document.getElementById('c-btn').classList.add('hidden'); document.getElementById('n').value=""; document.getElementById('pr').value=""; }
+        function resetF(){ 
+            document.getElementById('eid').value=""; 
+            document.getElementById('n').value=""; 
+            document.getElementById('desc').value="";
+            document.getElementById('pr').value=""; 
+            document.getElementById('img').value="";
+            document.getElementById('form-t').innerText="Novo Produto"; 
+            document.getElementById('s-btn').innerText="SALVAR"; 
+            document.getElementById('c-btn').classList.add('hidden'); 
+        }
         async function save(){
             const id = document.getElementById('eid').value;
-            const met = id ? 'PUT' : 'POST'; const url = id ? `/api/products/${id}` : `/api/products/${storeId}`;
-            await fetch(url, {method:met, headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:n.value, price:parseFloat(pr.value), category:cat.value, image_url:img.value})});
+            const payload = {
+                name: document.getElementById('n').value,
+                description: document.getElementById('desc').value,
+                price: parseFloat(document.getElementById('pr').value),
+                category: document.getElementById('cat').value,
+                image_url: document.getElementById('img').value
+            };
+            const met = id ? 'PUT' : 'POST'; 
+            const url = id ? `/api/products/${id}` : `/api/products/${storeId}`;
+            await fetch(url, {method:met, headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
             resetF(); loadP();
         }
         async function delP(id){ if(confirm("Excluir?")){ await fetch(`/api/products/${id}`,{method:'DELETE'}); loadP(); } }
@@ -74,11 +107,11 @@
             const data = await res.json();
             document.getElementById('aba-ped').innerHTML = data.map(o=>`
                 <div class="bg-white text-black p-5 rounded-2xl border-l-8 ${o.status=='Preparando'?'border-blue-500':'border-orange-500'}">
-                    <div class="flex justify-between font-bold"><span>${o.cliente}</span><span class="text-green-600">R$ ${o.total}</span></div>
-                    <p class="text-[10px] text-gray-400 mt-1 mb-4 uppercase font-black">${o.status} - ${o.itens}</p>
+                    <div class="flex justify-between font-bold"><span>${o.cliente}</span><span class="text-green-600 font-black text-lg">R$ ${o.total}</span></div>
+                    <p class="text-[10px] text-gray-400 mt-1 mb-4 uppercase font-bold tracking-widest">${o.status} - ${o.itens}</p>
                     <div class="flex gap-1">
                         <button onclick="setS(${o.id},'Preparando')" class="flex-1 bg-blue-100 text-blue-600 p-2 rounded-lg text-[10px] font-bold">PREPARAR</button>
-                        <button onclick="setS(${o.id},'Saiu para Entrega')" class="flex-1 bg-orange-100 text-orange-600 p-2 rounded-lg text-[10px] font-bold">ENTREGA</button>
+                        <button onclick="setS(${o.id},'Saiu para Entrega')" class="flex-1 bg-orange-100 text-orange-600 p-2 rounded-lg text-[10px] font-bold">SAIU P/ ENTREGA</button>
                         <button onclick="setS(${o.id},'Concluído')" class="flex-1 bg-green-100 text-green-600 p-2 rounded-lg text-[10px] font-bold">OK</button>
                     </div>
                 </div>`).join('');
