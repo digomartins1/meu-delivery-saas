@@ -4,7 +4,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from .database import Base, engine, get_db
 from sqlalchemy import Column, Integer, String, Float, Text, DateTime, Boolean
-from pydantic import BaseModel
 from datetime import datetime, timedelta
 import json
 
@@ -12,7 +11,7 @@ import json
 class User(Base):
     __tablename__ = "users"; id = Column(Integer, primary_key=True)
     username = Column(String, unique=True); password = Column(String); store_id = Column(Integer)
-    is_open = Column(Boolean, default=True) # NOVO: Status da Loja
+    is_open = Column(Boolean, default=True)
 
 class Product(Base):
     __tablename__ = "products"; id = Column(Integer, primary_key=True)
@@ -31,7 +30,6 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# --- GERENCIADOR WEBSOCKET ---
 class Manager:
     def __init__(self): self.cons = {}
     async def connect(self, ws, s_id):
@@ -46,41 +44,36 @@ class Manager:
 
 manager = Manager()
 
-# --- ROTAS DE CONFIGURAÇÃO ---
+# --- ROTAS API ---
 @app.get("/api/db-reset")
 def db_reset(db: Session = Depends(get_db)):
     Base.metadata.drop_all(bind=engine); Base.metadata.create_all(bind=engine)
-    return "BANCO RESETADO"
+    return "RESET OK"
 
 @app.get("/api/setup")
 def setup(db: Session = Depends(get_db)):
     if not db.query(User).filter(User.username == "admin").first():
         db.add(User(username="admin", password="123", store_id=1, is_open=True))
-        db.commit()
-        return "Admin OK"
-    return "Já existe"
-
-# --- ROTAS DA LOJA (ABERTO/FECHADO) ---
-@app.get("/api/store-status/{s_id}")
-def get_store_status(s_id: int, db: Session = Depends(get_db)):
-    u = db.query(User).filter(User.store_id == s_id).first()
-    return {"is_open": u.is_open if u else False}
-
-@app.post("/api/store-status/{s_id}")
-async def toggle_store(s_id: int, data: dict, db: Session = Depends(get_db)):
-    u = db.query(User).filter(User.store_id == s_id).first()
-    if u:
-        u.is_open = data['is_open']
-        db.commit()
-        await manager.send(s_id, {"type": "store_status", "is_open": u.is_open})
+        db.commit(); return "CRIADO: admin / 123"
     return "OK"
 
-# --- ROTAS RESTANTES (Login, Produtos, Pedidos...) ---
 @app.post("/api/login")
 async def login(data: dict, db: Session = Depends(get_db)):
     u = db.query(User).filter(User.username == data['username'], User.password == data['password']).first()
     if not u: raise HTTPException(status_code=401)
     return {"store_id": u.store_id, "username": u.username}
+
+@app.get("/api/store-status/{s_id}")
+def get_st_loja(s_id: int, db: Session = Depends(get_db)):
+    u = db.query(User).filter(User.store_id == s_id).first()
+    return {"is_open": u.is_open if u else True}
+
+@app.post("/api/store-status/{s_id}")
+async def toggle_loja(s_id: int, data: dict, db: Session = Depends(get_db)):
+    u = db.query(User).filter(User.store_id == s_id).first()
+    if u: u.is_open = data['is_open']; db.commit()
+    await manager.send(s_id, {"type": "store_status", "is_open": u.is_open})
+    return "OK"
 
 @app.get("/api/products/{s_id}")
 def list_p(s_id: int, db: Session = Depends(get_db)):
@@ -91,16 +84,14 @@ def add_p(s_id: int, data: dict, db: Session = Depends(get_db)):
     db.add(Product(**data, store_id=s_id)); db.commit(); return "OK"
 
 @app.put("/api/products/{p_id}")
-def update_p(p_id: int, data: dict, db: Session = Depends(get_db)):
+def up_p(p_id: int, data: dict, db: Session = Depends(get_db)):
     p = db.query(Product).filter(Product.id == p_id).first()
     if p:
-        p.name=data['name']; p.price=data['price']; p.category=data['category']
-        p.image_url=data.get('image_url'); p.description=data.get('description')
-        db.commit()
-    return "OK"
+        for k,v in data.items(): setattr(p, k, v)
+        db.commit(); return "OK"
 
 @app.delete("/api/products/{p_id}")
-def delete_p(p_id: int, db: Session = Depends(get_db)):
+def del_p(p_id: int, db: Session = Depends(get_db)):
     p = db.query(Product).filter(Product.id == p_id).first(); db.delete(p); db.commit(); return "OK"
 
 @app.get("/api/orders/{s_id}")
@@ -109,29 +100,29 @@ def list_o(s_id: int, db: Session = Depends(get_db)):
 
 @app.get("/api/history/{s_id}")
 def get_h(s_id: int, db: Session = Depends(get_db)):
-    limite = datetime.now() - timedelta(days=15)
-    return db.query(Order).filter(Order.store_id == s_id, Order.created_at >= limite).all()
+    lim = datetime.now() - timedelta(days=15)
+    return db.query(Order).filter(Order.store_id == s_id, Order.created_at >= lim).all()
 
 @app.get("/api/order-status/{o_id}")
-def get_st(o_id: int, db: Session = Depends(get_db)):
+def get_o_st(o_id: int, db: Session = Depends(get_db)):
     o = db.query(Order).filter(Order.id == o_id).first()
-    return {"status": o.status} if o else HTTPException(status_code=404)
+    return {"status": o.status} if o else HTTPException(404)
 
 @app.post("/order/{s_id}")
 async def create_o(s_id: int, data: dict, db: Session = Depends(get_db)):
     u = db.query(User).filter(User.store_id == s_id).first()
-    if not u.is_open: raise HTTPException(status_code=403, detail="Loja Fechada")
+    if not u.is_open: raise HTTPException(403, "Fechado")
     o = Order(cliente=data['cliente'], itens=data['itens'], total=data['total'], store_id=s_id)
     db.add(o); db.commit(); db.refresh(o)
-    await manager.send(s_id, {"id": o.id, "status": "update"})
+    await manager.send(s_id, {"id": o.id, "status": "Pendente", "cliente": o.cliente, "total": o.total, "itens": o.itens})
     return {"order_id": o.id}
 
 @app.post("/api/orders/{o_id}/status")
-async def up_status(o_id: int, data: dict, db: Session = Depends(get_db)):
+async def up_st(o_id: int, data: dict, db: Session = Depends(get_db)):
     o = db.query(Order).filter(Order.id == o_id).first()
     if o:
         o.status = data['status']; db.commit()
-        await manager.send(o.store_id, {"id": o_id, "status": data['status']})
+        await manager.send(o.store_id, {"id": o.id, "status": o.status})
     return "OK"
 
 @app.websocket("/ws/{s_id}")
@@ -142,5 +133,5 @@ async def ws_route(ws: WebSocket, s_id: int):
     except WebSocketDisconnect: manager.disconnect(ws, s_id)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
-@app.get(
+@app.get("/")
+def home(): from fastapi.responses import RedirectResponse; return RedirectResponse("/static/index.html")
