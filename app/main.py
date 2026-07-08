@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from datetime import datetime, timedelta
 import json
 
-# --- MOTOR DE BANCO DE DADOS ---
+# --- MODELOS ---
 class User(Base):
     __tablename__ = "users"; id = Column(Integer, primary_key=True)
     username = Column(String, unique=True); password = Column(String); store_id = Column(Integer)
@@ -26,11 +26,10 @@ class Order(Base):
 
 Base.metadata.create_all(bind=engine)
 
-# --- APP CONFIG ---
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# --- GERENCIADOR WEBSOCKET ---
+# --- WEBSOCKET MANAGER ---
 class Manager:
     def __init__(self): self.cons = {}
     async def connect(self, ws, s_id):
@@ -45,21 +44,18 @@ class Manager:
 
 manager = Manager()
 
-# --- 1. ROTAS DE API (DEVEM VIR PRIMEIRO) ---
+# --- ROTAS API ---
 
 @app.get("/api/db-reset")
 def db_reset(db: Session = Depends(get_db)):
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    return {"status": "BANCO RESETADO"}
+    Base.metadata.drop_all(bind=engine); Base.metadata.create_all(bind=engine)
+    return "BANCO RESETADO"
 
 @app.get("/api/setup")
 def setup(db: Session = Depends(get_db)):
     if not db.query(User).filter(User.username == "admin").first():
-        db.add(User(username="admin", password="123", store_id=1))
-        db.commit()
-        return {"status": "ADMIN CRIADO"}
-    return {"status": "JA EXISTE"}
+        db.add(User(username="admin", password="123", store_id=1)); db.commit()
+    return "OK"
 
 @app.post("/api/login")
 async def login(data: dict, db: Session = Depends(get_db)):
@@ -73,9 +69,14 @@ def list_p(s_id: int, db: Session = Depends(get_db)):
 
 @app.post("/api/products/{s_id}")
 def add_p(s_id: int, data: dict, db: Session = Depends(get_db)):
-    db.add(Product(**data, store_id=s_id))
-    db.commit()
-    return {"ok": True}
+    db.add(Product(**data, store_id=s_id)); db.commit(); return "OK"
+
+# Rota Crítica para o Rastreamento do Cliente
+@app.get("/api/order-status/{o_id}")
+def get_order_status(o_id: int, db: Session = Depends(get_db)):
+    o = db.query(Order).filter(Order.id == o_id).first()
+    if not o: raise HTTPException(status_code=404)
+    return {"id": o.id, "status": o.status, "cliente": o.cliente}
 
 @app.get("/api/orders/{s_id}")
 def list_o(s_id: int, db: Session = Depends(get_db)):
@@ -99,7 +100,7 @@ async def up_status(o_id: int, data: dict, db: Session = Depends(get_db)):
     if o:
         o.status = data['status']; db.commit()
         await manager.send(o.store_id, {"id": o_id, "status": data['status']})
-    return {"ok": True}
+    return "OK"
 
 @app.websocket("/ws/{s_id}")
 async def ws_route(ws: WebSocket, s_id: int):
@@ -108,9 +109,6 @@ async def ws_route(ws: WebSocket, s_id: int):
         while True: await ws.receive_text()
     except WebSocketDisconnect: manager.disconnect(ws, s_id)
 
-# --- 2. ROTAS DE ARQUIVOS (DEVE VIR POR ÚLTIMO) ---
-
-# Tenta servir da pasta 'static'
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
