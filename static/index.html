@@ -1,93 +1,164 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cardápio Digital</title><script src="https://cdn.tailwindcss.com"></script>
-    <style>.view { display: none; } .view.active { display: block; } #v-status.active { display: flex !important; }</style>
+    <style>
+        .view { display: none; }
+        .view.active { display: block; }
+        /* A tela de status é um flex para centralizar, mas só aparece com .active */
+        #v-status.active { display: flex !important; }
+    </style>
 </head>
-<body class="bg-gray-50 pb-28">
-    <div id="ov-fechado" class="hidden fixed inset-0 bg-slate-900/90 z-[100] flex flex-col items-center justify-center p-10 text-center text-white">
-        <div class="text-7xl mb-4">😴</div><h2 class="text-2xl font-black uppercase">Loja Fechada</h2>
-        <p class="text-slate-400 mt-2">Voltaremos em breve!</p>
+<body class="bg-gray-50 pb-32">
+
+    <!-- BLOQUEIO DE LOJA FECHADA -->
+    <div id="ov-fechado" class="hidden fixed inset-0 bg-slate-900/95 z-[100] flex flex-col items-center justify-center p-10 text-center text-white">
+        <div class="text-7xl mb-4">😴</div><h2 class="text-2xl font-black uppercase tracking-tighter">Loja Fechada</h2>
+        <p class="text-slate-400 mt-2 text-sm uppercase font-bold tracking-widest">Voltaremos em breve!</p>
     </div>
 
-    <div id="btn-rastrear" onclick="toggleT('s')" class="hidden fixed top-4 right-4 bg-orange-600 text-white px-5 py-2 rounded-full shadow-2xl z-50 animate-pulse text-[10px] font-bold border-2 border-white uppercase">📍 Rastrear</div>
+    <!-- BOTÃO FLUTUANTE DE RASTREIO (Só aparece se houver pedido) -->
+    <div id="btn-rastrear" onclick="toggleT('s')" class="hidden fixed top-4 right-4 bg-orange-600 text-white px-5 py-2 rounded-full shadow-2xl z-50 animate-pulse text-[10px] font-black border-2 border-white uppercase tracking-widest">
+        📍 Acompanhar Pedido
+    </div>
 
+    <!-- TELA 1: CARDÁPIO (A ÚNICA QUE COMEÇA ATIVA) -->
     <div id="v-menu" class="view active">
-        <header class="bg-orange-600 text-white p-10 text-center shadow-lg mb-6"><h1 class="text-3xl font-black italic uppercase tracking-tighter">DELIVERY JOTTA</h1></header>
+        <header class="bg-orange-600 text-white p-10 text-center shadow-lg mb-6">
+            <h1 class="text-3xl font-black italic uppercase tracking-tighter">Delivery Jotta</h1>
+            <p class="text-[10px] font-bold opacity-70 uppercase tracking-widest mt-1">O sabor que você merece</p>
+        </header>
         <main id="menu" class="p-4 max-w-md mx-auto space-y-6"></main>
-        <div id="cart" class="fixed bottom-0 left-0 right-0 bg-white p-4 border-t hidden flex justify-between items-center shadow-2xl rounded-t-3xl z-40">
-            <div><p class="text-[10px] text-gray-400 font-bold uppercase">Total</p><b id="tot" class="text-2xl text-orange-600 font-black">R$ 0,00</b></div>
-            <button onclick="enviar()" class="bg-green-600 text-white px-10 py-3 rounded-full font-black text-lg active:scale-95 transition shadow-lg uppercase">Pedir</button>
+        
+        <!-- BARRA DO CARRINHO -->
+        <div id="cart" class="fixed bottom-0 left-0 right-0 bg-white p-4 border-t hidden flex justify-between items-center shadow-[0_-10px_30px_rgba(0,0,0,0.1)] rounded-t-[2.5rem] z-40">
+            <div>
+                <p class="text-[10px] text-gray-400 font-bold uppercase">Total do Pedido</p>
+                <b id="tot" class="text-2xl text-orange-600 font-black">R$ 0,00</b>
+            </div>
+            <button onclick="enviarPedido()" class="bg-green-600 text-white px-10 py-4 rounded-full font-black text-lg shadow-lg active:scale-90 transition uppercase">Pedir Agora</button>
         </div>
     </div>
 
-    <div id="v-status" class="view fixed inset-0 bg-white z-[60] flex flex-col items-center justify-center p-10 text-center">
-        <div class="text-7xl mb-6">🛵</div><h2 class="text-2xl font-bold text-slate-800 mb-2">Seu Pedido</h2>
-        <div class="bg-orange-50 w-full p-10 rounded-[2.5rem] border-2 border-orange-100 mb-10 shadow-inner">
-            <p class="text-[10px] font-black text-orange-400 mb-2 uppercase">Status Atual</p>
+    <!-- TELA 2: STATUS DO PEDIDO (ESCONDIDA POR PADRÃO) -->
+    <div id="v-status" class="view fixed inset-0 bg-white z-[60] flex-col items-center justify-center p-10 text-center">
+        <div class="text-7xl mb-6">🛵</div>
+        <h2 class="text-2xl font-bold text-slate-800 mb-2">Acompanhe seu Pedido</h2>
+        <p class="text-gray-400 text-sm mb-10 italic">O lojista atualizará o status abaixo:</p>
+        
+        <div class="bg-orange-50 w-full p-10 rounded-[2.5rem] border-2 border-orange-100 mb-12 shadow-inner">
+            <p class="text-[10px] font-black text-orange-400 mb-2 uppercase tracking-widest">Status Atual</p>
             <p id="st-txt" class="text-4xl font-black text-orange-600 uppercase tracking-tighter">Pendente</p>
         </div>
-        <button onclick="toggleT('m')" class="text-gray-400 underline text-sm font-bold uppercase">Voltar ao Menu</button>
+        
+        <button onclick="toggleT('m')" class="w-full bg-slate-100 text-slate-500 py-4 rounded-2xl font-bold text-xs uppercase tracking-widest shadow-sm">Voltar ao Cardápio</button>
     </div>
 
     <script>
-        const sId = 1; const WA = "5511999999999"; 
+        const sId = 1; 
+        const WA_NUMBER = "5511999999999"; // Coloque seu Zap aqui
         let total = 0; let itens = [];
 
-        async function load(){
+        // 1. Carregar Menu
+        async function loadMenu(){
             const res = await fetch(`/api/products/${sId}`);
             const data = await res.json();
+            const container = document.getElementById('menu');
             const cats = {};
-            data.forEach(p=>{ if(!cats[p.category]) cats[p.category]=[]; cats[p.category].push(p); });
+            data.forEach(p => { if(!cats[p.category]) cats[p.category]=[]; cats[p.category].push(p); });
+            
             let h = "";
             for(let c in cats){
-                h += `<h2 class="text-orange-600 font-bold text-[10px] uppercase mb-4 mt-8 tracking-widest border-b border-orange-100 pb-1">${c}</h2>`;
+                h += `<h2 class="text-orange-600 font-black text-[10px] uppercase mb-4 mt-8 tracking-[0.2em] border-b border-orange-100 pb-1">${c}</h2>`;
                 h += cats[c].map(p=>`
-                <div class="bg-white p-3 rounded-2xl shadow-sm flex items-center mb-4 border border-gray-100">
-                    <img src="${p.image_url||'https://via.placeholder.com/150'}" class="w-16 h-16 rounded-xl object-cover mr-4 bg-gray-50">
-                    <div class="flex-1"><h3 class="font-bold text-gray-800 text-sm leading-tight">${p.name}</h3><p class="text-[10px] text-gray-400 mt-0.5">${p.description||''}</p><p class="text-orange-600 font-black text-sm mt-1">R$ ${p.price.toFixed(2)}</p></div>
-                    <button onclick="add('${p.name}',${p.price})" class="bg-orange-600 text-white w-10 h-10 rounded-full font-bold text-2xl shadow-lg active:scale-90 transition">+</button>
-                </div>`).join('');
+                    <div class="bg-white p-3 rounded-2xl shadow-sm flex items-center mb-4 border border-gray-100">
+                        <img src="${p.image_url || 'https://via.placeholder.com/150'}" class="w-16 h-16 rounded-xl object-cover mr-4 bg-gray-50">
+                        <div class="flex-1">
+                            <h3 class="font-bold text-gray-800 text-sm leading-tight">${p.name}</h3>
+                            <p class="text-[10px] text-gray-400 mt-0.5 line-clamp-2">${p.description || ''}</p>
+                            <p class="text-orange-600 font-black text-sm mt-1">R$ ${p.price.toFixed(2)}</p>
+                        </div>
+                        <button onclick="add('${p.name}', ${p.price})" class="bg-orange-600 text-white w-10 h-10 rounded-full font-bold text-2xl shadow-lg active:scale-90 transition">+</button>
+                    </div>`).join('');
             }
-            document.getElementById('menu').innerHTML = h || '<p class="text-center py-20">Cardápio Vazio.</p>';
-            checkS();
+            container.innerHTML = h || '<p class="text-center py-20 text-gray-300">Nenhum item disponível.</p>';
         }
-        function add(n,p){ total+=p; itens.push(n); document.getElementById('tot').innerText=`R$ ${total.toFixed(2)}`; document.getElementById('cart').classList.remove('hidden'); }
-        async function enviar(){
+
+        function add(n,p){
+            total+=p; itens.push(n);
+            document.getElementById('tot').innerText=`R$ ${total.toFixed(2)}`;
+            document.getElementById('cart').classList.remove('hidden');
+        }
+
+        async function enviarPedido(){
             const cli = prompt("Seu nome?"); if(!cli) return;
-            const res = await fetch(`/order/${sId}`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({cliente:cli, total:total.toFixed(2), itens:itens.join(", ")})});
-            if(res.status === 403) return alert("Loja Fechada!");
-            const d = await res.json(); localStorage.setItem('pid', d.order_id);
-            window.open(`https://wa.me/${WA}?text=Pedido de ${cli}: ${itens.join(", ")}`);
+            const res = await fetch(`/order/${sId}`, {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({cliente:cli, total:total.toFixed(2), itens:itens.join(", ")})
+            });
+            const d = await res.json();
+            localStorage.setItem('pid', d.order_id); // Salva o ID para rastreio
+            
+            const msg = `*NOVO PEDIDO*\n*Cliente:* ${cli}\n*Itens:* ${itens.join(", ")}\n*Total:* R$ ${total.toFixed(2)}`;
+            window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`);
             location.reload();
         }
-        async function checkS(){
-            const resLoja = await fetch(`/api/store-status/${sId}`);
-            const dLoja = await resLoja.json();
-            document.getElementById('ov-fechado').classList.toggle('hidden', dLoja.is_open);
 
-            const id = localStorage.getItem('pid'); if(!id) return;
-            const res = await fetch(`/api/order-status/${id}`);
-            if(res.ok){
-                const d = await res.json();
-                if(d.status !== 'Concluído'){
-                    document.getElementById('st-txt').innerText=d.status;
+        // 2. Lógica de Persistência e Rastreio
+        async function checkStatus(){
+            // Primeiro: Checa se a loja está aberta
+            const rL = await fetch(`/api/store-status/${sId}`);
+            const dL = await rL.json();
+            document.getElementById('ov-fechado').classList.toggle('hidden', dL.is_open);
+
+            // Segundo: Checa se o usuário tem um pedido ativo
+            const id = localStorage.getItem('pid');
+            if(!id) return;
+
+            try {
+                const res = await fetch(`/api/order-status/${id}`);
+                const data = await res.json();
+                if(res.ok && data.status !== 'Concluído'){
+                    document.getElementById('st-txt').innerText = data.status;
                     document.getElementById('btn-rastrear').classList.remove('hidden');
                     conectarWS(id);
-                } else { localStorage.removeItem('pid'); }
-            }
+                } else {
+                    localStorage.removeItem('pid');
+                }
+            } catch(e) { console.error("Erro no rastreio"); }
         }
+
         function conectarWS(id){
             const ws = new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws/${sId}`);
-            ws.onmessage=(e)=>{ 
-                const m=JSON.parse(e.data); 
-                if(m.type === 'store_status') document.getElementById('ov-fechado').classList.toggle('hidden', m.is_open);
-                if(m.id == id){ document.getElementById('st-txt').innerText=m.status; if(m.status==='Concluído'){localStorage.removeItem('pid');location.reload();}}
+            ws.onmessage = (e) => {
+                const d = JSON.parse(e.data);
+                if(d.id == id){
+                    document.getElementById('st-txt').innerText = d.status;
+                    if(d.status === 'Concluído'){
+                        localStorage.removeItem('pid');
+                        alert("Pedido Finalizado! Obrigado.");
+                        location.reload();
+                    }
+                }
+                // Escuta se a loja abriu ou fechou em tempo real
+                if(d.type === 'store_status') document.getElementById('ov-fechado').classList.toggle('hidden', d.is_open);
             };
         }
-        function toggleT(v){ document.getElementById('v-menu').classList.toggle('active', v==='m'); document.getElementById('v-status').classList.toggle('active', v==='s'); }
-        window.onload = () => { load(); };
+
+        function toggleT(v){
+            if(v === 's'){
+                document.getElementById('v-menu').classList.remove('active');
+                document.getElementById('v-status').classList.add('active');
+                document.getElementById('btn-rastrear').classList.add('hidden');
+            } else {
+                document.getElementById('v-status').classList.remove('active');
+                document.getElementById('v-menu').classList.add('active');
+                document.getElementById('btn-rastrear').classList.remove('hidden');
+            }
+        }
+
+        window.onload = () => { loadMenu(); checkStatus(); };
     </script>
 </body>
 </html>
